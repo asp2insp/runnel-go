@@ -2,6 +2,7 @@ package runnel
 
 import (
 	"os"
+  "unsafe"
 	"path/filepath"
 
 	"github.com/cheekybits/genny/generic"
@@ -37,10 +38,12 @@ func NewTypedStream(name string) *TypedStream {
 type inputManagerTyped struct {
 	inChannels []<-chan TypedRef
 	streamData mmap.MMap
+	parent     *TypedStream
 }
 
 func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
 	ret := new(inputManagerTyped)
+	ret.parent = parent
 	ret.inChannels = make([]<-chan TypedRef, 0, 1)
 	file, err := os.OpenFile(parent.fname(), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 	check(err)
@@ -55,10 +58,12 @@ func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
 type outputManagerTyped struct {
 	outChannels []chan<- TypedRef
 	streamData  mmap.MMap
+	parent      *TypedStream
 }
 
 func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	ret := new(outputManagerTyped)
+	ret.parent = parent
 	ret.outChannels = make([]chan<- TypedRef, 0, 1)
 	file, err := os.Open(parent.fname())
 	check(err)
@@ -66,6 +71,14 @@ func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	check(err)
 	ret.streamData = mapData
 	return ret
+}
+
+func (outputManager *outputManagerTyped) resolve(ref *TypedRef) *Typed {
+	if ref.fileId == outputManager.parent.fileId {
+		return (*Typed)unsafe.Pointer(&outputManager.streamData[ref.offset])
+	} else {
+		return nil
+	}
 }
 
 // =================== FILTERS ==================
@@ -82,8 +95,4 @@ func check(e error) {
 	if e != nil {
 		panic(e)
 	}
-}
-
-func (r *TypedRef) get() Typed {
-
 }
