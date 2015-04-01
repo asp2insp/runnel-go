@@ -137,3 +137,31 @@ func TestOutputToChannel(t *testing.T) {
 	// Wait for the subroutine to finish
 	<-done
 }
+
+func TestOutputToMultipleChannels(t *testing.T) {
+	stream := NewIntStream("channel")
+	done := make(chan struct{})
+
+	for i := 0; i < 5; i++ {
+		go func() {
+			c := make(chan *int)
+			stream.Outlet(c)
+			var d *int
+			for {
+				d = <-c
+				if *d == 513 {
+					done <- struct{}{}
+				}
+			}
+		}()
+	}
+
+	for i := 0; i <= 513; i++ {
+		stream.Insert(&i)
+	}
+
+	// Wait for all subroutines to finish
+	for i := 0; i < 5; i++ {
+		<-done
+	}
+}
