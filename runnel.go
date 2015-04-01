@@ -14,11 +14,14 @@ import (
 type Typed generic.Type
 
 type TypedStream struct {
-	in     *inputManagerTyped
-	out    *outputManagerTyped
-	fileId string
-	Name   string
-	Size   uint64
+	in         *inputManagerTyped
+	out        *outputManagerTyped
+	fileId     string
+	Name       string
+	Size       uint64
+	header     *StreamHeader
+	headerMem  mmap.MMap
+	headerFile *os.File
 }
 
 type TypedRef struct {
@@ -31,26 +34,23 @@ func NewTypedStream(name string) *TypedStream {
 		Name:   name,
 		fileId: uuid.New(),
 	}
+
+	ret.headerMem, ret.headerFile = mmapFile(ret.fheader(), os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	ret.header = toHeader(ret.headerMem)
+
 	ret.in = newInputManagerTyped(ret)
 	ret.out = newOutputManagerTyped(ret)
 	return ret
 }
 
-func (stream *TypedStream) insert(data *Typed) {
-	// TODO: Connect to the inChannels rather than calling insert
-	// directly
-	stream.in.insert(data)
-}
-
 // ==================== INPUT ===================
 
 type inputManagerTyped struct {
-	inChannels   []<-chan TypedRef
-	streamData   mmap.MMap
-	streamHeader *StreamHeader
-	parent       *TypedStream
-	offset       uint64
-	file         *os.File
+	inChannels []<-chan TypedRef
+	streamData mmap.MMap
+	parent     *TypedStream
+	offset     uint64
+	file       *os.File
 }
 
 func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
@@ -60,29 +60,15 @@ func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
 	ret.inChannels = make([]<-chan TypedRef, 0, 1)
 
 	// Map in the data
-	ret.streamData, ret.file = ret.mmapFile(parent.fname())
+	ret.streamData, ret.file = mmapFile(parent.fname(), os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
 
-	// Map in the header
-	headerMap, _ := ret.mmapFile(parent.fheader())
-	ret.streamHeader = toHeader(headerMap)
-	ret.streamHeader.FileSize = utils.Filesize(ret.file)
+	// Update the header
+	ret.parent.header.FileSize = utils.Filesize(ret.file)
 	return ret
 }
 
-func (inputManager *inputManagerTyped) mmapFile(path string) (mmap.MMap, *os.File) {
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
-	utils.Check(err)
-	if utils.Filesize(file) == 0 {
-		err = file.Truncate(int64(os.Getpagesize()))
-		utils.Check(err)
-	}
-	mapData, err := mmap.Map(file, mmap.RDWR, 0)
-	utils.Check(err)
-	return mapData, file
-}
-
-func (iM *inputManagerTyped) insert(data *Typed) {
-	header := iM.streamHeader
+func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
+	header := iM.parent.header
 	// Check to see if we need to resize
 	if header.EntrySize*(header.EntryCount+1) >= header.FileSize {
 		iM.setFileSizeTo(header.FileSize * 2)
@@ -91,14 +77,17 @@ func (iM *inputManagerTyped) insert(data *Typed) {
 	address := &iM.streamData[iM.offset]
 	pointer := (*Typed)(unsafe.Pointer(address))
 	*pointer = *data
+	retOffset := iM.offset
 	iM.offset += uint64(unsafe.Sizeof(*data))
 	iM.parent.Size += 1
 
 	// Update the header
-	if iM.streamHeader.EntrySize == 0 {
-		iM.streamHeader.EntrySize = uint64(unsafe.Sizeof(*data))
+	if header.EntrySize == 0 {
+		header.EntrySize = uint64(unsafe.Sizeof(*data))
 	}
-	iM.streamHeader.EntryCount += 1
+	header.EntryCount += 1
+
+	return &TypedRef{iM.parent.fileId, retOffset}
 }
 
 func (inputManager *inputManagerTyped) setFileSizeTo(size uint64) {
@@ -107,18 +96,17 @@ func (inputManager *inputManagerTyped) setFileSizeTo(size uint64) {
 
 	// Re-map our data
 	inputManager.streamData.Unmap()
-	inputManager.streamData, _ = inputManager.mmapFile(inputManager.file.Name())
+	inputManager.streamData, _ = mmapFile(inputManager.file.Name(), os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
 
 	// Update the header
-	inputManager.streamHeader.FileSize = size
+	inputManager.parent.header.FileSize = size
 }
 
 // =================== OUTPUT ===================
 
 type outputManagerTyped struct {
-	outChannels   []chan<- TypedRef
+	outChannels   []chan *TypedRef
 	streamData    mmap.MMap
-	streamHeader  *StreamHeader
 	parent        *TypedStream
 	file          *os.File
 	lastKnownSize uint64
@@ -127,29 +115,28 @@ type outputManagerTyped struct {
 func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	ret := new(outputManagerTyped)
 	ret.parent = parent
-	ret.outChannels = make([]chan<- TypedRef, 0, 1)
+	ret.outChannels = make([]chan *TypedRef, 0, 1)
 
 	// Map in the data
-	ret.streamData, ret.file = ret.mmapFile(parent.fname())
+	ret.streamData, ret.file = mmapFile(parent.fname(), os.O_RDONLY, mmap.RDONLY)
 
 	// Map in the header
-	headerMap, _ := ret.mmapFile(parent.fheader())
-	ret.streamHeader = toHeader(headerMap)
-	ret.lastKnownSize = ret.streamHeader.FileSize
+	ret.lastKnownSize = ret.parent.header.FileSize
 	return ret
 }
 
-func (outputManager *outputManagerTyped) mmapFile(path string) (mmap.MMap, *os.File) {
-	file, err := os.Open(path)
-	utils.Check(err)
-	mapData, err := mmap.Map(file, mmap.RDONLY, 0)
-	utils.Check(err)
-	return mapData, file
+func (oM *outputManagerTyped) notify(ref *TypedRef) {
+	for i := range oM.outChannels {
+		select {
+		case oM.outChannels[i] <- ref:
+		default:
+		}
+	}
 }
 
 func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
 	if ref.fileId == oM.parent.fileId {
-		if oM.lastKnownSize != oM.streamHeader.FileSize {
+		if oM.lastKnownSize != oM.parent.header.FileSize {
 			oM.refreshMap()
 		}
 		address := &oM.streamData[ref.offset]
@@ -161,19 +148,63 @@ func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
 
 func (oM *outputManagerTyped) refreshMap() {
 	oM.streamData.Unmap()
-	oM.streamData, _ = oM.mmapFile(oM.file.Name())
+	oM.streamData, _ = mmapFile(oM.file.Name(), os.O_RDONLY, mmap.RDONLY)
 }
 
 // =================== FILTERS ==================
 
 // =================== STREAMS ==================
 
-// ==================== UTILS ===================
-
-func (p *TypedStream) fname() string {
-	return filepath.Join(os.TempDir(), p.fileId)
+func (s *TypedStream) Outlet(c chan *Typed) {
+	middle := make(chan *TypedRef)
+	s.out.outChannels = append(s.out.outChannels, middle)
+	go func() {
+		var count uint64 = 0
+		for s.IsAlive() {
+			if s.header.EntryCount > count {
+				datum := s.FindOne(count)
+				// TODO: Update to public API
+				c <- s.out.resolve(datum)
+				count++
+			} else {
+				<-middle
+			}
+		}
+	}()
 }
 
-func (p *TypedStream) fheader() string {
-	return filepath.Join(os.TempDir(), p.fileId+"_header")
+func (s *TypedStream) FindOne(i uint64) *TypedRef {
+	return &TypedRef{s.fileId, s.header.EntrySize * i}
+}
+
+func (s *TypedStream) Insert(data *Typed) {
+	// TODO: Connect to the inChannels rather than calling insert
+	// directly
+	ref := s.in.insert(data)
+	s.out.notify(ref)
+}
+
+func (s *TypedStream) IsAlive() bool {
+	return s.header != nil
+}
+
+func (s *TypedStream) Close() {
+	// TODO: make in/out implement closable
+	s.in.streamData.Unmap()
+	s.in.file.Close()
+	s.out.streamData.Unmap()
+	s.out.file.Close()
+	s.headerMem.Unmap()
+	s.headerFile.Close()
+	s.header = nil
+}
+
+// ==================== UTILS ===================
+
+func (s *TypedStream) fname() string {
+	return filepath.Join(os.TempDir(), s.fileId)
+}
+
+func (s *TypedStream) fheader() string {
+	return filepath.Join(os.TempDir(), s.fileId+"_header")
 }

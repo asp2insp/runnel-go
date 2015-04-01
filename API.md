@@ -11,6 +11,7 @@
 ## insert(message)
 
 ## consume(handler)
+## outlet(channel)
 
 
 Not sure if these are filters or stream apis. I'm leaning towards filters.
