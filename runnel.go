@@ -1,7 +1,6 @@
 package runnel
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"unsafe"
@@ -26,7 +25,7 @@ type TypedStream struct {
 }
 
 type TypedRef struct {
-	fileId string
+	stream *TypedStream
 	offset uint64
 }
 
@@ -91,7 +90,7 @@ func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
 	}
 	header.EntryCount += 1
 
-	return &TypedRef{iM.parent.fileId, retOffset}
+	return &TypedRef{iM.parent, retOffset}
 }
 
 func (inputManager *inputManagerTyped) setFileSizeTo(size uint64) {
@@ -99,11 +98,13 @@ func (inputManager *inputManagerTyped) setFileSizeTo(size uint64) {
 	utils.Check(err)
 
 	// Re-map our data
-	inputManager.streamData.Unmap()
+	tmpMap := inputManager.streamData
 	inputManager.streamData, _ = mmapFile(inputManager.file.Name(), os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	tmpMap.Unmap()
 
 	// Update the header
 	inputManager.parent.header.FileSize = size
+	inputManager.parent.out.refreshMap()
 }
 
 // =================== OUTPUT ===================
@@ -152,16 +153,8 @@ func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
 	if !oM.parent.IsAlive() {
 		return nil
 	}
-	if ref.fileId == oM.parent.fileId {
-		if oM.lastKnownSize != oM.parent.header.FileSize {
-			oM.refreshMap()
-		}
+	if ref.stream == oM.parent {
 		address := &oM.streamData[ref.offset]
-		if ref.offset+oM.parent.header.EntrySize > oM.parent.header.FileSize {
-			bottom := &oM.streamData[0]
-			top := &oM.streamData[oM.parent.header.FileSize-1]
-			panic(fmt.Sprintf("Trying to access address %v which is out of bounds [%v, %v]", ref.offset, bottom, top))
-		}
 		return (*Typed)(unsafe.Pointer(address))
 	} else {
 		return nil
@@ -200,7 +193,7 @@ func (s *TypedStream) Outlet(c chan Typed) {
 }
 
 func (s *TypedStream) FindOne(i uint64) *TypedRef {
-	return &TypedRef{s.fileId, s.header.EntrySize * i}
+	return &TypedRef{s, s.header.EntrySize * i}
 }
 
 func (s *TypedStream) Insert(data *Typed) {
@@ -219,13 +212,13 @@ func (s *TypedStream) IsAlive() bool {
  */
 func (s *TypedStream) Close() {
 	// TODO: make in/out implement closable
+	s.header = &StreamHeader{}
 	s.in.streamData.Unmap()
 	s.in.file.Close()
 	s.out.streamData.Unmap()
 	s.out.file.Close()
 	s.headerMem.Unmap()
 	s.headerFile.Close()
-	s.header = &StreamHeader{}
 }
 
 // ==================== UTILS ===================

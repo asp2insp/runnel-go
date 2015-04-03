@@ -67,7 +67,7 @@ func TestRoundTripData(t *testing.T) {
 
 	var ref *IntRef
 	for i := 0; i < 100; i++ {
-		ref = &IntRef{stream.fileId, uint64(i * 8)}
+		ref = &IntRef{stream, uint64(i * 8)}
 		testutils.CheckInt(i, *stream.out.resolve(ref), t)
 	}
 	stream.Close()
@@ -84,7 +84,7 @@ func TestPageIncrement(t *testing.T) {
 
 	var ref *IntRef
 	for i := 0; i <= 513; i++ {
-		ref = &IntRef{stream.fileId, uint64(i * 8)}
+		ref = &IntRef{stream, uint64(i * 8)}
 		testutils.CheckInt(i, *stream.out.resolve(ref), t)
 	}
 	// Should see output header updated
