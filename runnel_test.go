@@ -14,6 +14,7 @@ func TestInsertIncrementsSize(t *testing.T) {
 	stream.Insert(&data2)
 
 	testutils.CheckUint64(2, stream.Size, t)
+	stream.Close()
 }
 
 func TestInsertUpdatesInputHeader(t *testing.T) {
@@ -25,6 +26,7 @@ func TestInsertUpdatesInputHeader(t *testing.T) {
 
 	testutils.CheckUint64(2, stream.header.EntryCount, t)
 	testutils.CheckUint64(8, stream.header.EntrySize, t)
+	stream.Close()
 }
 
 func TestInsertUpdatesOutputHeader(t *testing.T) {
@@ -36,6 +38,7 @@ func TestInsertUpdatesOutputHeader(t *testing.T) {
 
 	testutils.CheckUint64(2, stream.header.EntryCount, t)
 	testutils.CheckUint64(8, stream.header.EntrySize, t)
+	stream.Close()
 }
 
 func TestFindOne(t *testing.T) {
@@ -47,11 +50,13 @@ func TestFindOne(t *testing.T) {
 
 	testutils.CheckInt(45, *stream.out.resolve(stream.FindOne(0)), t)
 	testutils.CheckInt(66, *stream.out.resolve(stream.FindOne(1)), t)
+	stream.Close()
 }
 
 func TestCreateSetsHeaderSize(t *testing.T) {
 	stream := NewIntStream("test")
 	testutils.CheckUint64(uint64(os.Getpagesize()), stream.header.FileSize, t)
+	stream.Close()
 }
 
 func TestRoundTripData(t *testing.T) {
@@ -65,6 +70,7 @@ func TestRoundTripData(t *testing.T) {
 		ref = &IntRef{stream.fileId, uint64(i * 8)}
 		testutils.CheckInt(i, *stream.out.resolve(ref), t)
 	}
+	stream.Close()
 }
 
 func TestPageIncrement(t *testing.T) {
@@ -83,24 +89,25 @@ func TestPageIncrement(t *testing.T) {
 	}
 	// Should see output header updated
 	testutils.CheckUint64(uint64(os.Getpagesize()*2), stream.header.FileSize, t)
+	stream.Close()
 }
 
 func TestSingleOutputToChannel(t *testing.T) {
 	stream := NewIntStream("stream")
-	c := make(chan *int)
+	c := make(chan int)
 	stream.Outlet(c)
 
 	data := 5
 	stream.Insert(&data)
 
 	out := <-c
-	testutils.CheckInt(5, *out, t)
+	testutils.CheckInt(5, out, t)
 	stream.Close()
 }
 
 func TestDoubleOutputToChannel(t *testing.T) {
 	stream := NewIntStream("stream")
-	c := make(chan *int)
+	c := make(chan int)
 	stream.Outlet(c)
 
 	data := 5
@@ -109,9 +116,10 @@ func TestDoubleOutputToChannel(t *testing.T) {
 	stream.Insert(&data)
 
 	out := <-c
-	testutils.CheckInt(5, *out, t)
+	testutils.CheckInt(5, out, t)
 	out = <-c
-	testutils.CheckInt(10, *out, t)
+	testutils.CheckInt(10, out, t)
+	stream.Close()
 }
 
 func TestOutputToChannel(t *testing.T) {
@@ -119,13 +127,14 @@ func TestOutputToChannel(t *testing.T) {
 	done := make(chan struct{})
 
 	go func() {
-		c := make(chan *int)
+		c := make(chan int)
 		stream.Outlet(c)
-		var d *int
+		var d int
 		for {
 			d = <-c
-			if *d == 513 {
+			if d == 513 {
 				done <- struct{}{}
+				break
 			}
 		}
 	}()
@@ -136,6 +145,7 @@ func TestOutputToChannel(t *testing.T) {
 
 	// Wait for the subroutine to finish
 	<-done
+	stream.Close()
 }
 
 func TestOutputToMultipleChannels(t *testing.T) {
@@ -144,13 +154,14 @@ func TestOutputToMultipleChannels(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		go func() {
-			c := make(chan *int)
+			c := make(chan int)
 			stream.Outlet(c)
-			var d *int
+			var d int
 			for {
 				d = <-c
-				if *d == 513 {
+				if d == 513 {
 					done <- struct{}{}
+					break
 				}
 			}
 		}()
@@ -164,4 +175,23 @@ func TestOutputToMultipleChannels(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		<-done
 	}
+	stream.Close()
+}
+
+func TestOutputToChannelStartsFromBeginning(t *testing.T) {
+	stream := NewIntStream("channel")
+	data := 55
+	stream.Insert(&data)
+	data = 66
+	stream.Insert(&data)
+
+	c := make(chan int)
+	stream.Outlet(c)
+
+	d := <-c
+	testutils.CheckInt(55, d, t)
+	d = <-c
+	testutils.CheckInt(66, d, t)
+
+	stream.Close()
 }

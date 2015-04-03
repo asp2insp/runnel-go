@@ -1,6 +1,7 @@
 package runnel
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"unsafe"
@@ -68,6 +69,9 @@ func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
 }
 
 func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
+	if !iM.parent.IsAlive() {
+		return nil
+	}
 	header := iM.parent.header
 	// Check to see if we need to resize
 	if header.EntrySize*(header.EntryCount+1) >= header.FileSize {
@@ -112,6 +116,10 @@ type outputManagerTyped struct {
 	lastKnownSize uint64
 }
 
+/**
+ * Build a new output manager which manages a set of output channels
+ * for the stream and is responsible for reading from the mmapped file.
+ */
 func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	ret := new(outputManagerTyped)
 	ret.parent = parent
@@ -125,6 +133,9 @@ func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	return ret
 }
 
+/**
+ * Notify all listeners that there is new data available
+ */
 func (oM *outputManagerTyped) notify(ref *TypedRef) {
 	for i := range oM.outChannels {
 		select {
@@ -134,12 +145,23 @@ func (oM *outputManagerTyped) notify(ref *TypedRef) {
 	}
 }
 
+/**
+ * Resolve a reference into the mmap'd file and return the value
+ */
 func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
+	if !oM.parent.IsAlive() {
+		return nil
+	}
 	if ref.fileId == oM.parent.fileId {
 		if oM.lastKnownSize != oM.parent.header.FileSize {
 			oM.refreshMap()
 		}
 		address := &oM.streamData[ref.offset]
+		if ref.offset+oM.parent.header.EntrySize > oM.parent.header.FileSize {
+			bottom := &oM.streamData[0]
+			top := &oM.streamData[oM.parent.header.FileSize-1]
+			panic(fmt.Sprintf("Trying to access address %v which is out of bounds [%v, %v]", ref.offset, bottom, top))
+		}
 		return (*Typed)(unsafe.Pointer(address))
 	} else {
 		return nil
@@ -147,15 +169,19 @@ func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
 }
 
 func (oM *outputManagerTyped) refreshMap() {
+	tmpMap, _ := mmapFile(oM.file.Name(), os.O_RDONLY, mmap.RDONLY)
 	oM.streamData.Unmap()
-	oM.streamData, _ = mmapFile(oM.file.Name(), os.O_RDONLY, mmap.RDONLY)
+	oM.streamData = tmpMap
 }
 
 // =================== FILTERS ==================
 
 // =================== STREAMS ==================
 
-func (s *TypedStream) Outlet(c chan *Typed) {
+/**
+ * Output all values in the stream onto the channel
+ */
+func (s *TypedStream) Outlet(c chan Typed) {
 	middle := make(chan *TypedRef)
 	s.out.outChannels = append(s.out.outChannels, middle)
 	go func() {
@@ -164,7 +190,7 @@ func (s *TypedStream) Outlet(c chan *Typed) {
 			if s.header.EntryCount > count {
 				datum := s.FindOne(count)
 				// TODO: Update to public API
-				c <- s.out.resolve(datum)
+				c <- *s.out.resolve(datum)
 				count++
 			} else {
 				<-middle
@@ -185,9 +211,12 @@ func (s *TypedStream) Insert(data *Typed) {
 }
 
 func (s *TypedStream) IsAlive() bool {
-	return s.header != nil
+	return s.header.FileSize != 0
 }
 
+/**
+ * Close out the stream
+ */
 func (s *TypedStream) Close() {
 	// TODO: make in/out implement closable
 	s.in.streamData.Unmap()
@@ -196,7 +225,7 @@ func (s *TypedStream) Close() {
 	s.out.file.Close()
 	s.headerMem.Unmap()
 	s.headerFile.Close()
-	s.header = nil
+	s.header = &StreamHeader{}
 }
 
 // ==================== UTILS ===================
