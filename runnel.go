@@ -2,7 +2,6 @@ package runnel
 
 import (
 	"os"
-	"path/filepath"
 	"unsafe"
 
 	"code.google.com/p/go-uuid/uuid"
@@ -14,14 +13,12 @@ import (
 type Typed generic.Type
 
 type TypedStream struct {
-	in         *inputManagerTyped
-	out        *outputManagerTyped
-	fileId     string
-	Name       string
-	Size       uint64
-	header     *StreamHeader
-	headerMem  mmap.MMap
-	headerFile *os.File
+	in      *inputManagerTyped
+	out     *outputManagerTyped
+	Name    string
+	Id      string
+	storage *Storage
+	header  *StreamHeader
 }
 
 type TypedRef struct {
@@ -35,9 +32,6 @@ func NewTypedStream(name string) *TypedStream {
 		fileId: uuid.New(),
 	}
 
-	ret.headerMem, ret.headerFile = mmapFile(ret.fheader(), os.O_RDWR|os.O_CREATE, mmap.RDWR)
-	ret.header = toHeader(ret.headerMem)
-
 	ret.in = newInputManagerTyped(ret)
 	ret.out = newOutputManagerTyped(ret)
 	return ret
@@ -50,7 +44,6 @@ type inputManagerTyped struct {
 	streamData mmap.MMap
 	parent     *TypedStream
 	offset     uint64
-	file       *os.File
 }
 
 func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
@@ -93,20 +86,6 @@ func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
 	return &TypedRef{iM.parent, retOffset}
 }
 
-func (inputManager *inputManagerTyped) setFileSizeTo(size uint64) {
-	err := inputManager.file.Truncate(int64(size))
-	utils.Check(err)
-
-	// Re-map our data
-	tmpMap := inputManager.streamData
-	inputManager.streamData, _ = mmapFile(inputManager.file.Name(), os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
-	tmpMap.Unmap()
-
-	// Update the header
-	inputManager.parent.header.FileSize = size
-	inputManager.parent.out.refreshMap()
-}
-
 // =================== OUTPUT ===================
 
 type outputManagerTyped struct {
@@ -127,7 +106,6 @@ func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 	ret.outChannels = make([]chan *TypedRef, 0, 1)
 
 	// Map in the data
-	ret.streamData, ret.file = mmapFile(parent.fname(), os.O_RDONLY, mmap.RDONLY)
 
 	// Map in the header
 	ret.lastKnownSize = ret.parent.header.FileSize
@@ -159,12 +137,6 @@ func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
 	} else {
 		return nil
 	}
-}
-
-func (oM *outputManagerTyped) refreshMap() {
-	tmpMap, _ := mmapFile(oM.file.Name(), os.O_RDONLY, mmap.RDONLY)
-	oM.streamData.Unmap()
-	oM.streamData = tmpMap
 }
 
 // =================== FILTERS ==================
@@ -222,11 +194,3 @@ func (s *TypedStream) Close() {
 }
 
 // ==================== UTILS ===================
-
-func (s *TypedStream) fname() string {
-	return filepath.Join(os.TempDir(), s.fileId)
-}
-
-func (s *TypedStream) fheader() string {
-	return filepath.Join(os.TempDir(), s.fileId+"_header")
-}
