@@ -9,11 +9,6 @@ import (
 	"github.com/edsrzf/mmap-go"
 )
 
-type streamHeader struct {
-	FileSize   uint64
-	EntryCount uint64
-}
-
 type fileStorage struct {
 	fileId       string
 	rootPath     string
@@ -21,7 +16,8 @@ type fileStorage struct {
 	headerFile   *os.File
 	mappedMemory mmap.MMap
 	headerMemory mmap.MMap
-	header       *streamHeader
+	header       *StreamHeader
+	capacity     uint64
 }
 
 func NewFileStorage(id, root string) *fileStorage {
@@ -43,6 +39,7 @@ func (store *fileStorage) Init(id string) *Storage {
 }
 
 func (store *fileStorage) Resize(size int64) *Storage {
+	if
 	err := store.file.Truncate(int64(size))
 	utils.Check(err)
 
@@ -56,18 +53,23 @@ func (store *fileStorage) Resize(size int64) *Storage {
 	if tmpFile != nil {
 		tmpFile.Close()
 	}
+	store.capacity = size
 }
 
 func (store *fileStorage) GetBytes(start, end int) []byte {
 	return make([]byte, 0, 0)
 }
 
-func (store *fileStorage) Size() uint64 {
-	return 0
+func (store *fileStorage) Capacity() uint64 {
+	return store.capacity
 }
 
-func (store *fileStorage) EntryCount() uint64 {
-	return 0
+func (store *fileStorage) Header() *StreamHeader {
+	return store.header
+}
+
+func (store *fileStorage) Utilization() int {
+	return store.header.Tail * 100 / (store.capacity * 100)
 }
 
 // CLOSABLE

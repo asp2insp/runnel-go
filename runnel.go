@@ -40,10 +40,14 @@ func NewTypedStream(name, id string, storage *Storage) *TypedStream {
 
 // ==================== WRITER ===================
 
-type StreamWriterTyped struct {
+type TypedStreamWriter struct {
+	// Input channel allowing multiple goroutines to
+	// safely write to this writer simultaneously
 	inChannel <-chan *Typed
-	parent    *TypedStream
-	isAlive   bool
+	// The stream that this writer will write to
+	parent *TypedStream
+	// Whether this writer is alive
+	isAlive bool
 }
 
 // Create a writer for the given stream
@@ -51,20 +55,20 @@ type StreamWriterTyped struct {
 // Insert and write them to the underlying stream
 // as long as the writer and the stream that it operates
 // on are both alive
-func (stream *TypedStream) Writer() *StreamWriterTyped {
-	ret := &StreamWriterTyped{
+func (stream *TypedStream) Writer() *TypedStreamWriter {
+	ret := &TypedStreamWriter{
 		parent:    parent,
-		offset:    0,
 		inChannel: make(<-chan *Typed, 10),
 	}
 	go ret.writeLoop()
+	ret.isAlive = true
 	return ret
 }
 
 // As long as the writer is alive, pick up
 // data from the input channel and write it
 // to the stream
-func (writer *StreamWriterTyped) writeLoop() {
+func (writer *TypedStreamWriter) writeLoop() {
 	for writer.isAlive {
 		datum := <-writer.inChannel
 		writer.write(data)
@@ -77,15 +81,15 @@ func (writer *StreamWriterTyped) writeLoop() {
 // 1. Allocate space by bumping tail
 // 2. Write data into allocated space
 // 3. Declare data is available by bumping lastMessage
-func (writer *StreamWriterTyped) write(data *Typed) {
-	if !writer.parent.IsAlive() {
-		// If the stream isn't alive, there's no point
+func (writer *TypedStreamWriter) write(data *Typed) {
+	if !writer.parent.IsAlive() || !writer.isAlive {
+		// If the stream/writer isn't alive, there's no point
 		return
 	}
 	storage := writer.parent.storage
 	// Check to see if we need to resize
 	if storage.Utilization() > 75 {
-		// TODO: Work out how to handle multiple writers here
+		// TODO: Work out how to handle multiple writers here, maybe through buffer swap
 		storage.Resize(2 * storage.Capacity())
 	}
 
@@ -105,40 +109,50 @@ func (writer *StreamWriterTyped) write(data *Typed) {
 	writer.parent.storage.Header().EntryCount += 1
 }
 
-// =================== OUTPUT ===================
-
-type streamReaderTyped struct {
-	parent        *TypedStream
-	lastKnownSize uint64
+// Close the writer
+func (writer *TypedStreamWriter) Close() {
+	writer.isAlive = false
+	close(writer.inChannel)
 }
 
-/**
- * Build a new output manager which manages a set of output channels
- * for the stream and is responsible for reading from the mmapped file.
- */
-func newstreamReaderTyped(parent *TypedStream) *streamReaderTyped {
-	ret := new(streamReaderTyped)
-	ret.parent = parent
-	ret.outChannels = make([]chan *TypedRef, 0, 1)
+// =================== OUTPUT ===================
 
-	// Map in the data
+type TypedStreamReader struct {
+	// Out channel to allow blocking reads
+	outChannel chan<- Typed
+	// The stream that this reader will read from
+	parent *TypedStream
+	// The position in the stream that this reader
+	// will begin from
+	base uint64
+	// The progress this reader has made since
+	// it started reading
+	offset uint64
+	// Whether this reader is alive
+	isAlive bool
+}
 
-	// Map in the header
-	ret.lastKnownSize = ret.parent.header.FileSize
+// Build a new stream reader which maintains its place in the stream
+// and provides functionality for leaving the stream
+// TODO: Allow filtered readers, or maybe do an intermediate stream?
+func (stream *TypedStream) Reader(parent *TypedStream, base uint64) *TypedStreamReader {
+	ret := &TypedStreamReader{
+		parent:     stream,
+		outChannel: make(chan<- Typed),
+		base:       base,
+		offset:     0,
+	}
+	go ret.readLoop()
+	ret.isAlive = true
 	return ret
 }
 
-/**
- * Resolve a reference into the storage and return the address of the value
- * that corresponds to the reference
- */
-func (oM *streamReaderTyped) resolve(ref *TypedRef) *Typed {
-	if !oM.parent.IsAlive() && ref.stream == oM.parent {
-		// TODO: optimize this lookup
-		address := &oM.parent.storage.GetBytes(0, -1)[ref.offset]
-		return (*Typed)(unsafe.Pointer(address))
-	} else {
-		return nil
+// Loop endlessly to read the data from the stream
+func (reader *TypedStreamReader) readLoop() {
+	for reader.isAlive {
+		if reader.parent.lastMessage > reader.base+reader.offset {
+			// Advance he
+		}
 	}
 }
 
