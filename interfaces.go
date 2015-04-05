@@ -11,9 +11,11 @@ type Storage interface {
 	GetBytes(start, end int64) []byte
 	// Get the current size of used storage in bytes
 	Size() uint64
+	// Get the current capacity
+	Capacity() uint64
 	// Get the current number of entries (messages)
 	EntryCount() uint64
-	// Get the current utilization (size used/available size)
+	// Get the current utilization (size used/capacity)
 	// Returns an integer percentage out of 100 for performance
 	// reasons
 	Utilization() int

@@ -40,8 +40,6 @@ func (store *fileStorage) Init(id string) *Storage {
 	headerSize = unsafe.Sizeof(&streamHeader{})
 	store.headerMem, store.headerFile = mmapFile(store.fheader(), size, os.O_RDWR|os.O_CREATE, mmap.RDWR)
 	store.header = toHeader(store.headerMem)
-
-	store.parent.header.FileSize = utils.Filesize(store.file)
 }
 
 func (store *fileStorage) Resize(size int64) *Storage {
@@ -58,8 +56,6 @@ func (store *fileStorage) Resize(size int64) *Storage {
 	if tmpFile != nil {
 		tmpFile.Close()
 	}
-
-	store.header.FileSize = size
 }
 
 func (store *fileStorage) GetBytes(start, end int) []byte {

@@ -5,16 +5,17 @@ import (
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cheekybits/genny/generic"
-	"github.com/edsrzf/mmap-go"
 )
 
 type Typed generic.Type
 
 type TypedStream struct {
-	Name    string
-	Id      string
-	storage *Storage
-	IsAlive bool
+	Name        string
+	Id          string
+	storage     *Storage
+	IsAlive     bool
+	tail        uint64 //TODO: move to header
+	lastMessage uint64 //TODO: move to header
 }
 
 type TypedRef struct {
@@ -37,47 +38,71 @@ func NewTypedStream(name, id string, storage *Storage) *TypedStream {
 	return ret
 }
 
-// ==================== INPUT ===================
+// ==================== WRITER ===================
 
-type streamWriterTyped struct {
-	inChannel  <-chan TypedRef
-	streamData mmap.MMap
-	parent     *TypedStream
-	offset     uint64
+type StreamWriterTyped struct {
+	inChannel <-chan *Typed
+	parent    *TypedStream
+	isAlive   bool
 }
 
-func newstreamWriterTyped(parent *TypedStream) *streamWriterTyped {
-	ret := new(streamWriterTyped)
-	ret.parent = parent
-	ret.offset = 0
-	ret.inChannels = make([]<-chan TypedRef, 0, 1)
+// Create a writer for the given stream
+// The writer will continually listen for calls to
+// Insert and write them to the underlying stream
+// as long as the writer and the stream that it operates
+// on are both alive
+func (stream *TypedStream) Writer() *StreamWriterTyped {
+	ret := &StreamWriterTyped{
+		parent:    parent,
+		offset:    0,
+		inChannel: make(<-chan *Typed, 10),
+	}
+	go ret.writeLoop()
 	return ret
 }
 
-func (iM *streamWriterTyped) insert(data *Typed) *TypedRef {
-	if !iM.parent.IsAlive() {
-		return nil
+// As long as the writer is alive, pick up
+// data from the input channel and write it
+// to the stream
+func (writer *StreamWriterTyped) writeLoop() {
+	for writer.isAlive {
+		datum := <-writer.inChannel
+		writer.write(data)
 	}
-	header := iM.parent.header
+}
+
+// Write the given data into the stream
+// TODO: Prefix with header
+// The data is written in 3 steps:
+// 1. Allocate space by bumping tail
+// 2. Write data into allocated space
+// 3. Declare data is available by bumping lastMessage
+func (writer *StreamWriterTyped) write(data *Typed) {
+	if !writer.parent.IsAlive() {
+		// If the stream isn't alive, there's no point
+		return
+	}
+	storage := writer.parent.storage
 	// Check to see if we need to resize
-	if header.EntrySize*(header.EntryCount+1) >= header.FileSize {
-		iM.setFileSizeTo(header.FileSize * 2)
+	if storage.Utilization() > 75 {
+		// TODO: Work out how to handle multiple writers here
+		storage.Resize(2 * storage.Capacity())
 	}
 
-	address := &iM.streamData[iM.offset]
+	// TODO make this atomic
+	// Get old tail
+	offset := writer.parent.tail
+	// Bump tail
+	writer.parent.tail += uint64(unsafe.Sizeof(data))
+
+	// Write data
+	address := &writer.parent.storage.GetBytes(0, -1)[offset]
 	pointer := (*Typed)(unsafe.Pointer(address))
 	*pointer = *data
-	retOffset := iM.offset
-	iM.offset += uint64(unsafe.Sizeof(*data))
-	iM.parent.Size += 1
 
-	// Update the header
-	if header.EntrySize == 0 {
-		header.EntrySize = uint64(unsafe.Sizeof(*data))
-	}
-	header.EntryCount += 1
-
-	return &TypedRef{iM.parent, retOffset}
+	// Declare data available
+	writer.parent.lastMessage = offset
+	writer.parent.storage.Header().EntryCount += 1
 }
 
 // =================== OUTPUT ===================
@@ -140,16 +165,6 @@ func (s *TypedStream) Outlet(c chan Typed) {
 			}
 		}
 	}()
-}
-
-func (s *TypedStream) FindOne(i uint64) *TypedRef {
-	return &TypedRef{s, s.header.EntrySize * i}
-}
-
-func (s *TypedStream) Insert(data *Typed) {
-	// TODO: Connect to the inChannels rather than calling insert
-	// directly
-	ref := s.in.insert(data)
 }
 
 /**

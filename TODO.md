@@ -8,4 +8,10 @@
   - Allocate space
   - Write message
   - Go back and mark message header as done
-
+ - Redo header.
+  - Must exist on per-storage basis
+  - Needs to expose:
+    - Size
+    - EntryCount
+    - Last Message offset
+    - Tail offset
