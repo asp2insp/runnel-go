@@ -1,11 +1,9 @@
 package runnel
 
 import (
-	"os"
 	"unsafe"
 
 	"code.google.com/p/go-uuid/uuid"
-	"github.com/asp2insp/go-misc/utils"
 	"github.com/cheekybits/genny/generic"
 	"github.com/edsrzf/mmap-go"
 )
@@ -13,12 +11,10 @@ import (
 type Typed generic.Type
 
 type TypedStream struct {
-	in      *inputManagerTyped
-	out     *outputManagerTyped
 	Name    string
 	Id      string
 	storage *Storage
-	header  *StreamHeader
+	IsAlive bool
 }
 
 type TypedRef struct {
@@ -26,41 +22,39 @@ type TypedRef struct {
 	offset uint64
 }
 
-func NewTypedStream(name string) *TypedStream {
-	ret := &TypedStream{
-		Name:   name,
-		fileId: uuid.New(),
+func NewTypedStream(name, id string, storage *Storage) *TypedStream {
+	if id == "" {
+		id = uuid.New()
 	}
-
-	ret.in = newInputManagerTyped(ret)
-	ret.out = newOutputManagerTyped(ret)
+	if storage == nil {
+		storage = NewFileStorage(id, "")
+	}
+	ret := &TypedStream{
+		Name:    name,
+		fileId:  id,
+		storage: storage,
+	}
 	return ret
 }
 
 // ==================== INPUT ===================
 
-type inputManagerTyped struct {
-	inChannels []<-chan TypedRef
+type streamWriterTyped struct {
+	inChannel  <-chan TypedRef
 	streamData mmap.MMap
 	parent     *TypedStream
 	offset     uint64
 }
 
-func newInputManagerTyped(parent *TypedStream) *inputManagerTyped {
-	ret := new(inputManagerTyped)
+func newstreamWriterTyped(parent *TypedStream) *streamWriterTyped {
+	ret := new(streamWriterTyped)
 	ret.parent = parent
 	ret.offset = 0
 	ret.inChannels = make([]<-chan TypedRef, 0, 1)
-
-	// Map in the data
-	ret.streamData, ret.file = mmapFile(parent.fname(), os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
-
-	// Update the header
-	ret.parent.header.FileSize = utils.Filesize(ret.file)
 	return ret
 }
 
-func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
+func (iM *streamWriterTyped) insert(data *Typed) *TypedRef {
 	if !iM.parent.IsAlive() {
 		return nil
 	}
@@ -88,11 +82,8 @@ func (iM *inputManagerTyped) insert(data *Typed) *TypedRef {
 
 // =================== OUTPUT ===================
 
-type outputManagerTyped struct {
-	outChannels   []chan *TypedRef
-	streamData    mmap.MMap
+type streamReaderTyped struct {
 	parent        *TypedStream
-	file          *os.File
 	lastKnownSize uint64
 }
 
@@ -100,8 +91,8 @@ type outputManagerTyped struct {
  * Build a new output manager which manages a set of output channels
  * for the stream and is responsible for reading from the mmapped file.
  */
-func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
-	ret := new(outputManagerTyped)
+func newstreamReaderTyped(parent *TypedStream) *streamReaderTyped {
+	ret := new(streamReaderTyped)
 	ret.parent = parent
 	ret.outChannels = make([]chan *TypedRef, 0, 1)
 
@@ -113,26 +104,13 @@ func newOutputManagerTyped(parent *TypedStream) *outputManagerTyped {
 }
 
 /**
- * Notify all listeners that there is new data available
+ * Resolve a reference into the storage and return the address of the value
+ * that corresponds to the reference
  */
-func (oM *outputManagerTyped) notify(ref *TypedRef) {
-	for i := range oM.outChannels {
-		select {
-		case oM.outChannels[i] <- ref:
-		default:
-		}
-	}
-}
-
-/**
- * Resolve a reference into the mmap'd file and return the value
- */
-func (oM *outputManagerTyped) resolve(ref *TypedRef) *Typed {
-	if !oM.parent.IsAlive() {
-		return nil
-	}
-	if ref.stream == oM.parent {
-		address := &oM.streamData[ref.offset]
+func (oM *streamReaderTyped) resolve(ref *TypedRef) *Typed {
+	if !oM.parent.IsAlive() && ref.stream == oM.parent {
+		// TODO: optimize this lookup
+		address := &oM.parent.storage.GetBytes(0, -1)[ref.offset]
 		return (*Typed)(unsafe.Pointer(address))
 	} else {
 		return nil
@@ -172,25 +150,14 @@ func (s *TypedStream) Insert(data *Typed) {
 	// TODO: Connect to the inChannels rather than calling insert
 	// directly
 	ref := s.in.insert(data)
-	s.out.notify(ref)
-}
-
-func (s *TypedStream) IsAlive() bool {
-	return s.header.FileSize != 0
 }
 
 /**
  * Close out the stream
  */
 func (s *TypedStream) Close() {
-	// TODO: make in/out implement closable
-	s.header = &StreamHeader{}
-	s.in.streamData.Unmap()
-	s.in.file.Close()
-	s.out.streamData.Unmap()
-	s.out.file.Close()
-	s.headerMem.Unmap()
-	s.headerFile.Close()
+	s.IsAlive = false
+	s.storage.Close()
 }
 
 // ==================== UTILS ===================
