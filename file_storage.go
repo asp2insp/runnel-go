@@ -30,12 +30,12 @@ func NewFileStorage(id, root string) *fileStorage {
 // STORAGE
 func (store *fileStorage) Init(id string) *Storage {
 	// Map in the data
-	store.Resize(os.Getpagesize())
+	store.Resize(int64(os.Getpagesize()))
 
 	// Update the header
-	headerSize = unsafe.Sizeof(&streamHeader{})
-	store.headerMem, store.headerFile = mmapFile(store.fheader(), size, os.O_RDWR|os.O_CREATE, mmap.RDWR)
-	store.header = toHeader(store.headerMem)
+	headerSize := unsafe.Sizeof(&StreamHeader{})
+	store.headerMemory, store.headerFile = mmapFile(store.fheader(), size, os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	store.header = toHeader(store.headerMemory)
 }
 
 func (store *fileStorage) Resize(size int64) *Storage {
@@ -106,16 +106,16 @@ func mmapFile(path string, size, fileFlags, mmapFlags int) (mmap.MMap, *os.File)
 // to that root. Otherwise it is placed in the tmpdir
 func fname(id, root, string) string {
 	if root != "" {
-		return filepath.Join(root, s.fileId)
+		return filepath.Join(root, id)
 	} else {
-		return filepath.Join(os.TempDir(), s.fileId)
+		return filepath.Join(os.TempDir(), id)
 	}
 }
 
 // Return a path to the header file for the given id.
 // Will always be co-located with the file returned by fname
 func fheader(id, root string) string {
-	return fname() + "_header"
+	return fname(id,root) + "_header"
 }
 
 // Unsafe cast the []byte represented by the mmapped region

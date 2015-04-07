@@ -9,9 +9,9 @@ type StreamHeader struct {
 
 type Storage interface {
 	// Allocate memory and open the storage
-	Init(id string) *storage
+	Init(id string) *Storage
 	// Resize the storage to the given size
-	Resize(newSize int64) *storage
+	Resize(newSize int64) *Storage
 	// Get a window into the storage. This window is not owned by
 	// the client and the memory backing it may disappear.
 	// DO NOT HOLD ONTO THIS REFERENCE
