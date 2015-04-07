@@ -39,10 +39,10 @@ func (store *fileStorage) Init(id string) *Storage {
 }
 
 func (store *fileStorage) Resize(size int64) *Storage {
-	if
+  if store.file != nil {
 	err := store.file.Truncate(int64(size))
 	utils.Check(err)
-
+}
 	// Re-map our data
 	tmpMap := store.mappedMemory
 	tmpFile := store.file
