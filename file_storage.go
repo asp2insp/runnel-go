@@ -34,8 +34,8 @@ func (store *fileStorage) Init(id string) Storage {
 
 	// Update the header
 	headerSize := unsafe.Sizeof(&StreamHeader{})
-	store.headerMemory, store.headerFile = mmapFile(fheader(store.fileId, store.rootPath), size, os.O_RDWR|os.O_CREATE, mmap.RDWR)
-	store.header = toHeader(store.headerMemory)
+	store.headerMemory, store.headerFile = mmapFile(fheader(store.fileId, store.rootPath), headerSize, os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	store.header = mmapToHeader(store.headerMemory)
 return store
 }
 
