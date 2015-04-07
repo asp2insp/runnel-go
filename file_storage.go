@@ -28,7 +28,7 @@ func NewFileStorage(id, root string) *fileStorage {
 }
 
 // STORAGE
-func (store *fileStorage) Init(id string) *Storage {
+func (store *fileStorage) Init(id string) Storage {
 	// Map in the data
 	store.Resize(int64(os.Getpagesize()))
 
@@ -39,7 +39,7 @@ func (store *fileStorage) Init(id string) *Storage {
 return store
 }
 
-func (store *fileStorage) Resize(size int64) *Storage {
+func (store *fileStorage) Resize(size int64) Storage {
 var fname string
   if store.file != nil {
 	err := store.file.Truncate(int64(size))

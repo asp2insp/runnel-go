@@ -156,7 +156,7 @@ func (reader *TypedStreamReader) readLoop() {
    	pointer := (*Typed)(unsafe.Pointer(address))
    	reader.outChannel<-*pointer
     if reader.base+reader.offset < reader.parent.lastMessage {
-reader.offset+= uint64(unsafe.sizeOf(pointer))
+reader.offset+= uint64(unsafe.SizeOf(pointer))
 }
 		}
 	}
