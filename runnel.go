@@ -150,36 +150,27 @@ func (stream *TypedStream) Reader(parent *TypedStream, base uint64) *TypedStream
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive {
-		if reader.parent.lastMessage > reader.base+reader.offset {
-			// Advance he
+		if reader.base+reader.offset <= reader.parent.lastMessage {
+			// Advance the reader through the stream
+    address := &writer.parent.storage.GetBytes(0, -1)[offset]
+   	pointer := (*Typed)(unsafe.Pointer(address))
+   	reader.outChannel<-*pointer
+    if reader.base+reader.offset < reader.parent.lastMessage {
+reader.offset+= uint64(unsafe.sizeOf(pointer))
+}
 		}
 	}
+}
+
+// Read a single value from the stream (in a blocking fashion)
+func (reader *TypedStreamReader) read() Typed {
+  return <- reader.outChannel
 }
 
 // =================== FILTERS ==================
 
 // =================== STREAMS ==================
 
-/**
- * Output all values in the stream onto the channel
- */
-func (s *TypedStream) Outlet(c chan Typed) {
-	middle := make(chan *TypedRef)
-	s.out.outChannels = append(s.out.outChannels, middle)
-	go func() {
-		var count uint64 = 0
-		for s.IsAlive() {
-			if s.header.EntryCount > count {
-				datum := s.FindOne(count)
-				// TODO: Update to public API
-				c <- *s.out.resolve(datum)
-				count++
-			} else {
-				<-middle
-			}
-		}
-	}()
-}
 
 /**
  * Close out the stream
