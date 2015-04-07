@@ -62,7 +62,7 @@ fname = store.file.Name()
 return store
 }
 
-func (store *fileStorage) GetBytes(start, end int) []byte {
+func (store *fileStorage) GetBytes(start, end int64) []byte {
 	return make([]byte, 0, 0)
 }
 
