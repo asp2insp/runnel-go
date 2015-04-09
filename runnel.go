@@ -12,7 +12,7 @@ type Typed generic.Type
 type TypedStream struct {
 	Name        string
 	Id          string
-	storage     *Storage
+	storage     Storage
 	IsAlive     bool
 	tail        uint64 //TODO: move to header
 	lastMessage uint64 //TODO: move to header
@@ -23,7 +23,7 @@ type TypedRef struct {
 	offset uint64
 }
 
-func NewTypedStream(name, id string, storage *Storage) *TypedStream {
+func NewTypedStream(name, id string, storage Storage) *TypedStream {
 	if id == "" {
 		id = uuid.New()
 	}
@@ -32,7 +32,7 @@ func NewTypedStream(name, id string, storage *Storage) *TypedStream {
 	}
 	ret := &TypedStream{
 		Name:    name,
-		fileId:  id,
+		Id:      id,
 		storage: storage,
 	}
 	return ret
@@ -57,7 +57,7 @@ type TypedStreamWriter struct {
 // on are both alive
 func (stream *TypedStream) Writer() *TypedStreamWriter {
 	ret := &TypedStreamWriter{
-		parent:    parent,
+		parent:    stream,
 		inChannel: make(<-chan *Typed, 10),
 	}
 	go ret.writeLoop()
@@ -71,7 +71,7 @@ func (stream *TypedStream) Writer() *TypedStreamWriter {
 func (writer *TypedStreamWriter) writeLoop() {
 	for writer.isAlive {
 		datum := <-writer.inChannel
-		writer.write(data)
+		writer.write(datum)
 	}
 }
 
@@ -82,7 +82,7 @@ func (writer *TypedStreamWriter) writeLoop() {
 // 2. Write data into allocated space
 // 3. Declare data is available by bumping lastMessage
 func (writer *TypedStreamWriter) write(data *Typed) {
-	if !writer.parent.IsAlive() || !writer.isAlive {
+	if !writer.parent.IsAlive || !writer.isAlive {
 		// If the stream/writer isn't alive, there's no point
 		return
 	}
@@ -90,7 +90,7 @@ func (writer *TypedStreamWriter) write(data *Typed) {
 	// Check to see if we need to resize
 	if storage.Utilization() > 75 {
 		// TODO: Work out how to handle multiple writers here, maybe through buffer swap
-		storage.Resize(2 * storage.Capacity())
+		storage.Resize(uint64(2 * storage.Capacity()))
 	}
 
 	// TODO make this atomic
@@ -112,14 +112,13 @@ func (writer *TypedStreamWriter) write(data *Typed) {
 // Close the writer
 func (writer *TypedStreamWriter) Close() {
 	writer.isAlive = false
-	close(writer.inChannel)
 }
 
 // =================== OUTPUT ===================
 
 type TypedStreamReader struct {
 	// Out channel to allow blocking reads
-	outChannel chan<- Typed
+	outChannel chan Typed
 	// The stream that this reader will read from
 	parent *TypedStream
 	// The position in the stream that this reader
@@ -138,7 +137,7 @@ type TypedStreamReader struct {
 func (stream *TypedStream) Reader(parent *TypedStream, base uint64) *TypedStreamReader {
 	ret := &TypedStreamReader{
 		parent:     stream,
-		outChannel: make(chan<- Typed),
+		outChannel: make(chan Typed),
 		base:       base,
 		offset:     0,
 	}
@@ -152,25 +151,24 @@ func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive {
 		if reader.base+reader.offset <= reader.parent.lastMessage {
 			// Advance the reader through the stream
-    address := &writer.parent.storage.GetBytes(0, -1)[offset]
-   	pointer := (*Typed)(unsafe.Pointer(address))
-   	reader.outChannel<-*pointer
-    if reader.base+reader.offset < reader.parent.lastMessage {
-reader.offset+= uint64(unsafe.SizeOf(pointer))
-}
+			address := &reader.parent.storage.GetBytes(0, -1)[reader.offset]
+			pointer := (*Typed)(unsafe.Pointer(address))
+			reader.outChannel <- *pointer
+			if reader.base+reader.offset < reader.parent.lastMessage {
+				reader.offset += uint64(unsafe.Sizeof(pointer))
+			}
 		}
 	}
 }
 
 // Read a single value from the stream (in a blocking fashion)
 func (reader *TypedStreamReader) read() Typed {
-  return <- reader.outChannel
+	return <-reader.outChannel
 }
 
 // =================== FILTERS ==================
 
 // =================== STREAMS ==================
-
 
 /**
  * Close out the stream

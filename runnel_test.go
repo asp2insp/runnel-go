@@ -7,7 +7,7 @@ import "os"
 //go:generate genny -in=runnel.go -out=IntStream.go gen "Typed=int"
 
 func TestInsertIncrementsSize(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	data1 := 45
 	data2 := 66
 	stream.Insert(&data1)
@@ -18,7 +18,7 @@ func TestInsertIncrementsSize(t *testing.T) {
 }
 
 func TestInsertUpdatesInputHeader(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	data1 := 45
 	data2 := 66
 	stream.Insert(&data1)
@@ -30,7 +30,7 @@ func TestInsertUpdatesInputHeader(t *testing.T) {
 }
 
 func TestInsertUpdatesOutputHeader(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	data1 := 45
 	data2 := 66
 	stream.Insert(&data1)
@@ -42,7 +42,7 @@ func TestInsertUpdatesOutputHeader(t *testing.T) {
 }
 
 func TestFindOne(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	data1 := 45
 	data2 := 66
 	stream.Insert(&data1)
@@ -54,13 +54,13 @@ func TestFindOne(t *testing.T) {
 }
 
 func TestCreateSetsHeaderSize(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	testutils.CheckUint64(uint64(os.Getpagesize()), stream.header.FileSize, t)
 	stream.Close()
 }
 
 func TestRoundTripData(t *testing.T) {
-	stream := NewIntStream("test")
+	stream := NewIntStream("test", "", nil)
 	for i := 0; i < 100; i++ {
 		stream.Insert(&i)
 	}
@@ -74,7 +74,7 @@ func TestRoundTripData(t *testing.T) {
 }
 
 func TestPageIncrement(t *testing.T) {
-	stream := NewIntStream("large")
+	stream := NewIntStream("test", "", nil)
 	// 4096 / 8 = 512
 	for i := 0; i <= 513; i++ {
 		stream.Insert(&i)
@@ -93,7 +93,7 @@ func TestPageIncrement(t *testing.T) {
 }
 
 func TestSingleOutputToChannel(t *testing.T) {
-	stream := NewIntStream("stream")
+	stream := NewIntStream("test", "", nil)
 	c := make(chan int)
 	stream.Outlet(c)
 
@@ -106,7 +106,7 @@ func TestSingleOutputToChannel(t *testing.T) {
 }
 
 func TestDoubleOutputToChannel(t *testing.T) {
-	stream := NewIntStream("stream")
+	stream := NewIntStream("test", "", nil)
 	c := make(chan int)
 	stream.Outlet(c)
 
@@ -123,7 +123,7 @@ func TestDoubleOutputToChannel(t *testing.T) {
 }
 
 func TestOutputToChannel(t *testing.T) {
-	stream := NewIntStream("channel")
+	stream := NewIntStream("test", "", nil)
 	done := make(chan struct{})
 
 	go func() {
@@ -149,7 +149,7 @@ func TestOutputToChannel(t *testing.T) {
 }
 
 func TestOutputToMultipleChannels(t *testing.T) {
-	stream := NewIntStream("channel")
+	stream := NewIntStream("test", "", nil)
 	done := make(chan struct{})
 
 	for i := 0; i < 5; i++ {
@@ -179,7 +179,7 @@ func TestOutputToMultipleChannels(t *testing.T) {
 }
 
 func TestOutputToChannelStartsFromBeginning(t *testing.T) {
-	stream := NewIntStream("channel")
+	stream := NewIntStream("test", "", nil)
 	data := 55
 	stream.Insert(&data)
 	data = 66

@@ -30,28 +30,28 @@ func NewFileStorage(id, root string) *fileStorage {
 // STORAGE
 func (store *fileStorage) Init(id string) Storage {
 	// Map in the data
-	store.Resize(int64(os.Getpagesize()))
+	store.Resize(uint64(os.Getpagesize()))
 
 	// Update the header
-	headerSize := unsafe.Sizeof(&StreamHeader{})
+	headerSize := uint64(unsafe.Sizeof(&StreamHeader{}))
 	store.headerMemory, store.headerFile = mmapFile(fheader(store.fileId, store.rootPath), headerSize, os.O_RDWR|os.O_CREATE, mmap.RDWR)
 	store.header = mmapToHeader(store.headerMemory)
-return store
+	return store
 }
 
-func (store *fileStorage) Resize(size int64) Storage {
-var fname string
-  if store.file != nil {
-	err := store.file.Truncate(int64(size))
-	utils.Check(err)
-fname = store.file.Name()
-} else {
-  fname = fname(store.fileId, store.rootPath)
-}
+func (store *fileStorage) Resize(size uint64) Storage {
+	var fileName string
+	if store.file != nil {
+		err := store.file.Truncate(int64(size))
+		utils.Check(err)
+		fileName = store.file.Name()
+	} else {
+		fileName = fname(store.fileId, store.rootPath)
+	}
 	// Re-map our data
 	tmpMap := store.mappedMemory
 	tmpFile := store.file
-	store.mappedMemory, store.file = mmapFile(fname, size, os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	store.mappedMemory, store.file = mmapFile(fileName, size, os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
 	if len(tmpMap) > 0 {
 		tmpMap.Unmap()
 	}
@@ -59,7 +59,7 @@ fname = store.file.Name()
 		tmpFile.Close()
 	}
 	store.capacity = size
-return store
+	return store
 }
 
 func (store *fileStorage) GetBytes(start, end int64) []byte {
@@ -75,7 +75,7 @@ func (store *fileStorage) Header() *StreamHeader {
 }
 
 func (store *fileStorage) Utilization() int {
-	return store.header.Tail * 100 / (store.capacity * 100)
+	return int(store.header.Tail * 100 / (store.capacity * 100))
 }
 
 // CLOSABLE
@@ -83,7 +83,7 @@ func (store *fileStorage) Utilization() int {
 // Close this storage, by closing the file
 // pointers and unmapping all memory
 func (store *fileStorage) Close() {
-	store.header = &streamHeader{} // Empty the header so calls to Size() return 0
+	store.header = &StreamHeader{} // Empty the header so calls to Size() return 0
 	// Release the memory
 	store.mappedMemory.Unmap()
 	store.file.Close()
@@ -95,11 +95,11 @@ func (store *fileStorage) Close() {
 
 // Map the file at the given path into memory with the given flags.
 // Panics if the given file cannot be opened or mmapped
-func mmapFile(path string, size, fileFlags, mmapFlags int) (mmap.MMap, *os.File) {
+func mmapFile(path string, size uint64, fileFlags, mmapFlags int) (mmap.MMap, *os.File) {
 	file, err := os.OpenFile(path, fileFlags, 0666)
 	utils.Check(err)
 	if utils.Filesize(file) == 0 {
-		err = file.Truncate(os.Getpagesize())
+		err = file.Truncate(int64(os.Getpagesize()))
 		utils.Check(err)
 	}
 	mapData, err := mmap.Map(file, mmapFlags, 0)
@@ -110,7 +110,7 @@ func mmapFile(path string, size, fileFlags, mmapFlags int) (mmap.MMap, *os.File)
 // Return a path to the file named with the given id.
 // If a root dir is provided, the file will be relative
 // to that root. Otherwise it is placed in the tmpdir
-func fname(id, root, string) string {
+func fname(id, root string) string {
 	if root != "" {
 		return filepath.Join(root, id)
 	} else {
@@ -121,7 +121,7 @@ func fname(id, root, string) string {
 // Return a path to the header file for the given id.
 // Will always be co-located with the file returned by fname
 func fheader(id, root string) string {
-	return fname(id,root) + "_header"
+	return fname(id, root) + "_header"
 }
 
 // Unsafe cast the []byte represented by the mmapped region
