@@ -7,9 +7,13 @@ import (
 	"github.com/asp2insp/go-misc/testutils"
 )
 
+var testData = []byte("0123456789ABCDEF")
+
 func TestInit(t *testing.T) {
+	defer cleanup()
 	store := NewFileStorage("")
 	store.Init("id")
+	defer store.Close()
 
 	testutils.CheckString("id", store.fileId, t)
 	testutils.CheckString("", store.rootPath, t)
@@ -27,4 +31,33 @@ func TestInit(t *testing.T) {
 	testutils.CheckUint64(0, store.Header().Tail, t)
 	testutils.CheckUint64(0, store.Header().LastMessage, t)
 	testutils.CheckUint64(uint64(os.Getpagesize()), store.Header().FileSize, t)
+	testutils.CheckUint64(0, store.Header().EntryCount, t)
+}
+
+func TestPersistence(t *testing.T) {
+	defer cleanup()
+	store := NewFileStorage("").Init("id")
+	copy(store.GetBytes(0, -1), testData)
+	store.Close()
+
+	store = NewFileStorage("").Init("id")
+	defer store.Close()
+	if store.GetBytes(0, -1)[15] != 'F' {
+		t.Errorf("Expected %b got %b", 'F', store.GetBytes(0, -1)[15])
+	}
+}
+
+func TestUtilization(t *testing.T) {
+	defer cleanup()
+	store := NewFileStorage("")
+	store.Init("id")
+	defer store.Close()
+
+	store.Header().Tail = 2048
+	testutils.CheckInt(50, store.Utilization(), t)
+}
+
+func cleanup() {
+	os.Remove(fname("id", ""))
+	os.Remove(fheader("id", ""))
 }

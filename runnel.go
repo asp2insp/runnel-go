@@ -5,7 +5,7 @@ import (
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/asp2insp/runnel-go/i"
-	"github.com/asp2insp/runnel-go/storage"
+	"github.com/asp2insp/runnel-go/s"
 	"github.com/cheekybits/genny/generic"
 )
 
@@ -28,12 +28,13 @@ func NewTypedStream(name, id string, store i.Storage) *TypedStream {
 		id = uuid.New()
 	}
 	if store == nil {
-		store = storage.NewFileStorage(id, "")
+		store = s.NewFileStorage("").Init(id)
 	}
 	ret := &TypedStream{
 		Name:    name,
 		Id:      id,
 		storage: store,
+		IsAlive: true,
 	}
 	return ret
 }
@@ -155,7 +156,7 @@ func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive {
 		if reader.base+reader.offset <= reader.parent.header().LastMessage {
 			// Advance the reader through the stream
-			address := &reader.parent.storage.GetBytes(0, -1)[reader.offset]
+			address := &reader.parent.storage.GetBytes(0, -1)[reader.base+reader.offset]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
 			if reader.base+reader.offset < reader.parent.header().LastMessage {
