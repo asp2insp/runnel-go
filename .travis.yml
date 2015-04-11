@@ -2,6 +2,9 @@ language: go
 
 install:
   - go get github.com/cheekybits/genny
+  - go get code.google.com/p/go-uuid/uuid
+  - go get github.com/asp2insp/go-misc/
+  - go get github.com/edsrzf/mmap-go
 
 go:
   - 1.4
