@@ -4,18 +4,18 @@ import (
 	"unsafe"
 
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/asp2insp/runnel-go/i"
+	"github.com/asp2insp/runnel-go/storage"
 	"github.com/cheekybits/genny/generic"
 )
 
 type Typed generic.Type
 
 type TypedStream struct {
-	Name        string
-	Id          string
-	storage     Storage
-	IsAlive     bool
-	tail        uint64 //TODO: move to header
-	lastMessage uint64 //TODO: move to header
+	Name    string
+	Id      string
+	storage i.Storage
+	IsAlive bool
 }
 
 type TypedRef struct {
@@ -23,19 +23,23 @@ type TypedRef struct {
 	offset uint64
 }
 
-func NewTypedStream(name, id string, storage Storage) *TypedStream {
+func NewTypedStream(name, id string, store i.Storage) *TypedStream {
 	if id == "" {
 		id = uuid.New()
 	}
-	if storage == nil {
-		storage = NewFileStorage(id, "")
+	if store == nil {
+		store = storage.NewFileStorage(id, "")
 	}
 	ret := &TypedStream{
 		Name:    name,
 		Id:      id,
-		storage: storage,
+		storage: store,
 	}
 	return ret
+}
+
+func (stream *TypedStream) header() *i.StreamHeader {
+	return stream.storage.Header()
 }
 
 // ==================== WRITER ===================
@@ -71,7 +75,7 @@ func (stream *TypedStream) Writer() *TypedStreamWriter {
 func (writer *TypedStreamWriter) writeLoop() {
 	for writer.isAlive {
 		datum := <-writer.inChannel
-		writer.write(datum)
+		writer.Write(datum)
 	}
 }
 
@@ -81,7 +85,7 @@ func (writer *TypedStreamWriter) writeLoop() {
 // 1. Allocate space by bumping tail
 // 2. Write data into allocated space
 // 3. Declare data is available by bumping lastMessage
-func (writer *TypedStreamWriter) write(data *Typed) {
+func (writer *TypedStreamWriter) Write(data *Typed) {
 	if !writer.parent.IsAlive || !writer.isAlive {
 		// If the stream/writer isn't alive, there's no point
 		return
@@ -95,9 +99,9 @@ func (writer *TypedStreamWriter) write(data *Typed) {
 
 	// TODO make this atomic
 	// Get old tail
-	offset := writer.parent.tail
+	offset := writer.parent.header().Tail
 	// Bump tail
-	writer.parent.tail += uint64(unsafe.Sizeof(data))
+	writer.parent.header().Tail += uint64(unsafe.Sizeof(data))
 
 	// Write data
 	address := &writer.parent.storage.GetBytes(0, -1)[offset]
@@ -105,8 +109,8 @@ func (writer *TypedStreamWriter) write(data *Typed) {
 	*pointer = *data
 
 	// Declare data available
-	writer.parent.lastMessage = offset
-	writer.parent.storage.Header().EntryCount += 1
+	writer.parent.header().LastMessage = offset
+	writer.parent.header().EntryCount += 1
 }
 
 // Close the writer
@@ -134,7 +138,7 @@ type TypedStreamReader struct {
 // Build a new stream reader which maintains its place in the stream
 // and provides functionality for leaving the stream
 // TODO: Allow filtered readers, or maybe do an intermediate stream?
-func (stream *TypedStream) Reader(parent *TypedStream, base uint64) *TypedStreamReader {
+func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 	ret := &TypedStreamReader{
 		parent:     stream,
 		outChannel: make(chan Typed),
@@ -149,12 +153,12 @@ func (stream *TypedStream) Reader(parent *TypedStream, base uint64) *TypedStream
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive {
-		if reader.base+reader.offset <= reader.parent.lastMessage {
+		if reader.base+reader.offset <= reader.parent.header().LastMessage {
 			// Advance the reader through the stream
 			address := &reader.parent.storage.GetBytes(0, -1)[reader.offset]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
-			if reader.base+reader.offset < reader.parent.lastMessage {
+			if reader.base+reader.offset < reader.parent.header().LastMessage {
 				reader.offset += uint64(unsafe.Sizeof(pointer))
 			}
 		}
@@ -162,17 +166,23 @@ func (reader *TypedStreamReader) readLoop() {
 }
 
 // Read a single value from the stream (in a blocking fashion)
-func (reader *TypedStreamReader) read() Typed {
+func (reader *TypedStreamReader) Read() Typed {
 	return <-reader.outChannel
+}
+
+func (reader *TypedStreamReader) Close() {
+	reader.isAlive = false
 }
 
 // =================== FILTERS ==================
 
 // =================== STREAMS ==================
 
-/**
- * Close out the stream
- */
+func (s *TypedStream) Size() uint64 {
+	return s.header().EntryCount
+}
+
+// Close out the stream
 func (s *TypedStream) Close() {
 	s.IsAlive = false
 	s.storage.Close()

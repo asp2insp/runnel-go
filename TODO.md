@@ -1,13 +1,5 @@
 # Current
- - Refactor in/out to use the storage interface
- - Finish factoring out file storage implementation
  - Add in-memory storage implementation
- - Change in/out to StreamWriter and StreamReader
- - If only 1 writer, we're good
- - If multiple writers supported, then we need a 3 step process
-  - Allocate space
-  - Write message
-  - Go back and mark message header as done
  - Redo header.
   - Must exist on per-storage basis
   - Needs to expose:

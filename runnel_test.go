@@ -1,21 +1,79 @@
 package runnel
 
-import "testing"
-import "github.com/asp2insp/go-misc/testutils"
-import "os"
+import (
+	"testing"
+
+	"github.com/asp2insp/go-misc/testutils"
+)
 
 //go:generate genny -in=runnel.go -out=IntStream.go gen "Typed=int"
 
-func TestInsertIncrementsSize(t *testing.T) {
-	stream := NewIntStream("test", "", nil)
-	data1 := 45
-	data2 := 66
-	stream.Insert(&data1)
-	stream.Insert(&data2)
-
-	testutils.CheckUint64(2, stream.Size, t)
-	stream.Close()
+func TestCreation(t *testing.T) {
+	var stream *IntStream = NewIntStream("test", "", nil)
+	defer stream.Close()
 }
+
+func TestMakeWriter(t *testing.T) {
+	var stream *IntStream = NewIntStream("test", "", nil)
+	defer stream.Close()
+
+	var writer *IntStreamWriter = stream.Writer()
+	defer writer.Close()
+}
+
+func TestMakeReader(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+
+	var reader *IntStreamReader = stream.Reader(0 /* from beginning */)
+	defer reader.Close()
+}
+
+func TestWrite(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+
+	var writer *IntStreamWriter = stream.Writer()
+	defer writer.Close()
+
+	data := 5
+	writer.Write(&data)
+}
+
+func TestWriteIncrementsSize(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+
+	data1 := 45
+	writer := stream.Writer()
+	defer writer.Close()
+
+	writer.Write(&data1)
+
+	testutils.CheckUint64(1, stream.Size(), t)
+}
+
+/*
+func TestDataRoundTrip(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+
+	var writer *IntStreamWriter = stream.Writer()
+	defer writer.Close()
+
+	data := 5
+	writer.Write(&data)
+
+	var reader *IntStreamReader = stream.Reader(0) // from beginning
+	defer reader.Close()
+
+	out := reader.Read()
+	testutils.CheckInt(5, out, t)
+}
+
+
+
+
 
 func TestInsertUpdatesInputHeader(t *testing.T) {
 	stream := NewIntStream("test", "", nil)
@@ -195,3 +253,4 @@ func TestOutputToChannelStartsFromBeginning(t *testing.T) {
 
 	stream.Close()
 }
+*/

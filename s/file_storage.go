@@ -1,4 +1,4 @@
-package runnel
+package s
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"unsafe"
 
 	"github.com/asp2insp/go-misc/utils"
+	"github.com/asp2insp/runnel-go/i"
 	"github.com/edsrzf/mmap-go"
 )
 
@@ -16,30 +17,30 @@ type fileStorage struct {
 	headerFile   *os.File
 	mappedMemory mmap.MMap
 	headerMemory mmap.MMap
-	header       *StreamHeader
-	capacity     uint64
+	header       *i.StreamHeader
 }
 
-func NewFileStorage(id, root string) *fileStorage {
+func NewFileStorage(root string) *fileStorage {
 	return &fileStorage{
-		fileId:   id,
 		rootPath: root,
 	}
 }
 
 // STORAGE
-func (store *fileStorage) Init(id string) Storage {
-	// Map in the data
-	store.Resize(uint64(os.Getpagesize()))
+func (store *fileStorage) Init(id string) i.Storage {
+	store.fileId = id
 
 	// Update the header
-	headerSize := uint64(unsafe.Sizeof(&StreamHeader{}))
+	headerSize := uint64(unsafe.Sizeof(&i.StreamHeader{}))
 	store.headerMemory, store.headerFile = mmapFile(fheader(store.fileId, store.rootPath), headerSize, os.O_RDWR|os.O_CREATE, mmap.RDWR)
 	store.header = mmapToHeader(store.headerMemory)
+
+	// Map in the data
+	store.Resize(uint64(os.Getpagesize()))
 	return store
 }
 
-func (store *fileStorage) Resize(size uint64) Storage {
+func (store *fileStorage) Resize(size uint64) i.Storage {
 	var fileName string
 	if store.file != nil {
 		err := store.file.Truncate(int64(size))
@@ -58,7 +59,7 @@ func (store *fileStorage) Resize(size uint64) Storage {
 	if tmpFile != nil {
 		tmpFile.Close()
 	}
-	store.capacity = size
+	store.header.FileSize = size
 	return store
 }
 
@@ -67,15 +68,15 @@ func (store *fileStorage) GetBytes(start, end int64) []byte {
 }
 
 func (store *fileStorage) Capacity() uint64 {
-	return store.capacity
+	return store.header.FileSize
 }
 
-func (store *fileStorage) Header() *StreamHeader {
+func (store *fileStorage) Header() *i.StreamHeader {
 	return store.header
 }
 
 func (store *fileStorage) Utilization() int {
-	return int(store.header.Tail * 100 / (store.capacity * 100))
+	return int(store.header.Tail * 100 / (store.Capacity() * 100))
 }
 
 // CLOSABLE
@@ -83,7 +84,7 @@ func (store *fileStorage) Utilization() int {
 // Close this storage, by closing the file
 // pointers and unmapping all memory
 func (store *fileStorage) Close() {
-	store.header = &StreamHeader{} // Empty the header so calls to Size() return 0
+	store.header = &i.StreamHeader{} // Empty the header so calls to Size() return 0
 	// Release the memory
 	store.mappedMemory.Unmap()
 	store.file.Close()
@@ -126,6 +127,6 @@ func fheader(id, root string) string {
 
 // Unsafe cast the []byte represented by the mmapped region
 // to a streamHeader
-func mmapToHeader(data mmap.MMap) *StreamHeader {
-	return (*StreamHeader)(unsafe.Pointer(&data[0]))
+func mmapToHeader(data mmap.MMap) *i.StreamHeader {
+	return (*i.StreamHeader)(unsafe.Pointer(&data[0]))
 }
