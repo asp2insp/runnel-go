@@ -1,5 +1,10 @@
 language: go
 
+install:
+  - go get github.com/cheekybits/genny
+
 go:
   - 1.4
   - tip
+
+script: genny -in=runnel.go -out=IntStream.go gen "Typed=int"; go test ./...

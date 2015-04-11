@@ -2,6 +2,7 @@ package runnel
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/asp2insp/go-misc/testutils"
@@ -156,4 +157,173 @@ func TestStartReadFromMidway(t *testing.T) {
 	for i := 250; i < 513; i++ {
 		testutils.CheckInt(i, reader.Read(), t)
 	}
+}
+
+func TestSingleWriterSingleReader(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		var writer *IntStreamWriter = stream.Writer()
+		defer writer.Close()
+
+		// 4096 / 8 = 512
+		for i := 0; i < 513; i++ {
+			writer.Write(&i)
+		}
+		testutils.CheckUint64(513, stream.Size(), t)
+		wg.Done()
+	}()
+
+	go func() {
+		var reader *IntStreamReader = stream.Reader(0) // from beginning
+		defer reader.Close()
+
+		for i := 0; i < 513; i++ {
+			testutils.CheckInt(i, reader.Read(), t)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func TestSingleWriterMultipleReaders(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+	var wg sync.WaitGroup
+	wg.Add(1 + 10)
+
+	go func() {
+		var writer *IntStreamWriter = stream.Writer()
+		defer writer.Close()
+
+		// 4096 / 8 = 512
+		for i := 0; i < 513; i++ {
+			writer.Write(&i)
+		}
+		testutils.CheckUint64(513, stream.Size(), t)
+		wg.Done()
+	}()
+
+	for r := 0; r < 10; r++ {
+		go func() {
+			var reader *IntStreamReader = stream.Reader(0) // from beginning
+			defer reader.Close()
+
+			for i := 0; i < 513; i++ {
+				testutils.CheckInt(i, reader.Read(), t)
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
+}
+
+func TestSingleWriterMultipleHungryReaders(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+	var wg sync.WaitGroup
+	wg.Add(1 + 10)
+
+	for r := 0; r < 10; r++ {
+		go func() {
+			var reader *IntStreamReader = stream.Reader(0) // from beginning
+			defer reader.Close()
+
+			for i := 0; i < 513; i++ {
+				testutils.CheckInt(i, reader.Read(), t)
+			}
+			wg.Done()
+		}()
+	}
+
+	go func() {
+		var writer *IntStreamWriter = stream.Writer()
+		defer writer.Close()
+
+		// 4096 / 8 = 512
+		for i := 0; i < 513; i++ {
+			writer.Write(&i)
+		}
+		testutils.CheckUint64(513, stream.Size(), t)
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func TestMultipleWritersSingleReader(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+	var wg sync.WaitGroup
+	wg.Add(1 + 10)
+
+	go func() {
+		var reader *IntStreamReader = stream.Reader(0) // from beginning
+		defer reader.Close()
+		var target = 513 * 10 * 3
+
+		for i := 0; i < 513*10; i++ {
+			target -= reader.Read()
+		}
+		testutils.CheckInt(0, target, t)
+		wg.Done()
+	}()
+
+	for w := 0; w < 10; w++ {
+		go func() {
+			var writer *IntStreamWriter = stream.Writer()
+			defer writer.Close()
+			var amount = 3
+			// 4096 / 8 = 512
+			for i := 0; i < 513; i++ {
+				writer.Write(&amount)
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
+	testutils.CheckUint64(513*10, stream.Size(), t)
+}
+
+func TestMultipleWritersMultipleReaders(t *testing.T) {
+	stream := NewIntStream("test", "", nil)
+	defer stream.Close()
+	var wg sync.WaitGroup
+	wg.Add(10 + 10)
+
+	for r := 0; r < 10; r++ {
+		go func() {
+			var reader *IntStreamReader = stream.Reader(0) // from beginning
+			defer reader.Close()
+			var target = 513 * 10 * 3
+
+			for i := 0; i < 513*10; i++ {
+				target -= reader.Read()
+			}
+			testutils.CheckInt(0, target, t)
+			wg.Done()
+		}()
+	}
+
+	for w := 0; w < 10; w++ {
+		go func() {
+			var writer *IntStreamWriter = stream.Writer()
+			defer writer.Close()
+			var amount = 3
+			// 4096 / 8 = 512
+			for i := 0; i < 513; i++ {
+				writer.Write(&amount)
+			}
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
+	testutils.CheckUint64(513*10, stream.Size(), t)
 }
