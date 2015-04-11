@@ -114,15 +114,21 @@ func (store *fileStorage) Close() {
 
 // UTILS
 
-// Map the file at the given path into memory with the given flags.
-// Panics if the given file cannot be opened or mmapped
-func mmapFile(path string, size uint64, fileFlags, mmapFlags int) (mmap.MMap, *os.File) {
+// Open the given file with the given flags
+func open(path string, fileFlags int) *File {
 	file, err := os.OpenFile(path, fileFlags, 0666)
 	utils.Check(err)
 	if utils.Filesize(file) == 0 {
 		err = file.Truncate(int64(os.Getpagesize()))
 		utils.Check(err)
 	}
+	return file
+}
+
+// Map the file at the given path into memory with the given flags.
+// Panics if the given file cannot be opened or mmapped
+func mmapFile(path string, size uint64, fileFlags, mmapFlags int) (mmap.MMap, *os.File) {
+
 	mapData, err := mmap.Map(file, mmapFlags, 0)
 	utils.Check(err)
 	return mapData, file
