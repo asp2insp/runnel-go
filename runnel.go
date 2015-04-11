@@ -12,10 +12,11 @@ import (
 type Typed generic.Type
 
 type TypedStream struct {
-	Name    string
-	Id      string
-	storage i.Storage
-	IsAlive bool
+	Name              string
+	Id                string
+	storage           i.Storage
+	IsAlive           bool
+	lastKnownFileSize uint64
 }
 
 type TypedRef struct {
@@ -96,6 +97,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	if storage.Utilization() > 75 {
 		// TODO: Work out how to handle multiple writers here, maybe through buffer swap
 		storage.Resize(uint64(2 * storage.Capacity()))
+		writer.parent.lastKnownFileSize = writer.parent.header().FileSize
 	}
 
 	// TODO make this atomic
@@ -112,6 +114,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	// Declare data available
 	writer.parent.header().LastMessage = offset
 	writer.parent.header().EntryCount += 1
+	storage.Flush()
 }
 
 // Close the writer
@@ -154,6 +157,9 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive {
+		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
+			reader.parent.storage.Refresh()
+		}
 		if reader.base+reader.offset <= reader.parent.header().LastMessage {
 			// Advance the reader through the stream
 			address := &reader.parent.storage.GetBytes(0, -1)[reader.base+reader.offset]

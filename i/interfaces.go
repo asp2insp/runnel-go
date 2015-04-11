@@ -24,7 +24,12 @@ type Storage interface {
 	// Returns an integer percentage out of 100 for performance
 	// reasons
 	Utilization() int
+	// Close the storage, release all references
 	Close()
+	// Flush the memory contents to underlying medium
+	Flush()
+	// Refresh the in-memory version of the underlying medium
+	Refresh()
 }
 
 type Closable interface {

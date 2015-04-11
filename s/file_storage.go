@@ -79,6 +79,26 @@ func (store *fileStorage) Utilization() int {
 	return int(store.header.Tail * 100 / (store.Capacity()))
 }
 
+func (store *fileStorage) Flush() {
+	store.mappedMemory.Flush()
+	store.headerMemory.Flush()
+}
+
+func (store *fileStorage) Refresh() {
+	// TODO: Refresh header then refresh file.
+	// 			 This will be much easier once I have the single
+	//       file reference refactor in place
+	// tmpMap := store.mappedMemory
+	// tmpFile := store.file
+	// store.mappedMemory, store.file = mmapFile(fileName, size, os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	// if len(tmpMap) > 0 {
+	// 	tmpMap.Unmap()
+	// }
+	// if tmpFile != nil {
+	// 	tmpFile.Close()
+	// }
+}
+
 // CLOSABLE
 
 // Close this storage, by closing the file
