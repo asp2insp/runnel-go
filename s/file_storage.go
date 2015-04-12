@@ -30,34 +30,29 @@ func NewFileStorage(root string) *fileStorage {
 func (store *fileStorage) Init(id string) i.Storage {
 	store.fileId = id
 
-	// Update the header
-	headerSize := uint64(unsafe.Sizeof(&i.StreamHeader{}))
-	store.headerMemory, store.headerFile = mmapFile(fheader(store.fileId, store.rootPath), headerSize, os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	// Init the header
+	headerSize := int64(unsafe.Sizeof(&i.StreamHeader{}))
+	store.headerFile = open(fheader(store.fileId, store.rootPath), os.O_RDWR|os.O_CREATE|os.O_APPEND)
+	store.headerFile.Truncate(headerSize)
+	store.headerMemory = mmapFile(store.headerFile, mmap.RDWR)
 	store.header = mmapToHeader(store.headerMemory)
 
-	// Map in the data
-	store.Resize(uint64(os.Getpagesize()))
+	// Init the data
+	store.file = open(fname(store.fileId, store.rootPath), os.O_RDWR|os.O_CREATE|os.O_APPEND)
+	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
 	return store
 }
 
 func (store *fileStorage) Resize(size uint64) i.Storage {
-	var fileName string
 	if store.file != nil {
 		err := store.file.Truncate(int64(size))
 		utils.Check(err)
-		fileName = store.file.Name()
-	} else {
-		fileName = fname(store.fileId, store.rootPath)
 	}
 	// Re-map our data
 	tmpMap := store.mappedMemory
-	tmpFile := store.file
-	store.mappedMemory, store.file = mmapFile(fileName, size, os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
+	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
 	if len(tmpMap) > 0 {
 		tmpMap.Unmap()
-	}
-	if tmpFile != nil {
-		tmpFile.Close()
 	}
 	store.header.FileSize = size
 	return store
@@ -85,18 +80,8 @@ func (store *fileStorage) Flush() {
 }
 
 func (store *fileStorage) Refresh() {
-	// TODO: Refresh header then refresh file.
-	// 			 This will be much easier once I have the single
-	//       file reference refactor in place
-	// tmpMap := store.mappedMemory
-	// tmpFile := store.file
-	// store.mappedMemory, store.file = mmapFile(fileName, size, os.O_APPEND|os.O_RDWR|os.O_CREATE, mmap.RDWR)
-	// if len(tmpMap) > 0 {
-	// 	tmpMap.Unmap()
-	// }
-	// if tmpFile != nil {
-	// 	tmpFile.Close()
-	// }
+	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
+	store.headerMemory = mmapFile(store.headerFile, mmap.RDWR)
 }
 
 // CLOSABLE
@@ -115,7 +100,7 @@ func (store *fileStorage) Close() {
 // UTILS
 
 // Open the given file with the given flags
-func open(path string, fileFlags int) *File {
+func open(path string, fileFlags int) *os.File {
 	file, err := os.OpenFile(path, fileFlags, 0666)
 	utils.Check(err)
 	if utils.Filesize(file) == 0 {
@@ -127,11 +112,10 @@ func open(path string, fileFlags int) *File {
 
 // Map the file at the given path into memory with the given flags.
 // Panics if the given file cannot be opened or mmapped
-func mmapFile(path string, size uint64, fileFlags, mmapFlags int) (mmap.MMap, *os.File) {
-
+func mmapFile(file *os.File, mmapFlags int) mmap.MMap {
 	mapData, err := mmap.Map(file, mmapFlags, 0)
 	utils.Check(err)
-	return mapData, file
+	return mapData
 }
 
 // Return a path to the file named with the given id.
