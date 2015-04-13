@@ -71,7 +71,12 @@ func (store *fileStorage) Header() *i.StreamHeader {
 }
 
 func (store *fileStorage) Utilization() int {
-	return int(store.header.Tail * 100 / (store.Capacity()))
+	cap := store.Capacity()
+	if cap > 0 {
+		return int(store.header.Tail * 100 / cap)
+	} else {
+		return 0
+	}
 }
 
 func (store *fileStorage) Flush() {
