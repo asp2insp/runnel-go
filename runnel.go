@@ -1,6 +1,7 @@
 package runnel
 
 import (
+	"fmt"
 	"unsafe"
 
 	"code.google.com/p/go-uuid/uuid"
@@ -32,10 +33,11 @@ func NewTypedStream(name, id string, store i.Storage) *TypedStream {
 		store = s.NewFileStorage("").Init(id)
 	}
 	ret := &TypedStream{
-		Name:    name,
-		Id:      id,
-		storage: store,
-		IsAlive: true,
+		Name:              name,
+		Id:                id,
+		storage:           store,
+		IsAlive:           true,
+		lastKnownFileSize: store.Capacity(),
 	}
 	return ret
 }
@@ -75,7 +77,7 @@ func (stream *TypedStream) Writer() *TypedStreamWriter {
 // data from the input channel and write it
 // to the stream
 func (writer *TypedStreamWriter) writeLoop() {
-	for writer.isAlive {
+	for writer.isAlive && writer.parent.IsAlive {
 		datum := <-writer.inChannel
 		writer.Write(datum)
 	}
@@ -105,6 +107,11 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	offset := writer.parent.header().Tail
 	// Bump tail
 	writer.parent.header().Tail += uint64(unsafe.Sizeof(data))
+
+	// Check before we write
+	if writer.parent.header().Tail > storage.Capacity() {
+		panic(fmt.Sprintf("No Room! Header: %+v", storage.Header()))
+	}
 
 	// Write data
 	address := &writer.parent.storage.GetBytes(0, -1)[offset]
@@ -156,7 +163,7 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
-	for reader.isAlive {
+	for reader.isAlive && reader.parent.IsAlive {
 		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
 			reader.parent.storage.Refresh()
 		}

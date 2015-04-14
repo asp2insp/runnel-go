@@ -72,6 +72,55 @@ func TestMultiStreamInsertUpdatesInputHeader(t *testing.T) {
 	testutils.CheckUint64(8, stream2.header().LastMessage, t)
 }
 
+func TestMultiStreamRoundTripMulti(t *testing.T) {
+	cleanupFiles(t)
+
+	stream := NewIntStream("test", "id", nil)
+	defer stream.Close()
+
+	var writer *IntStreamWriter = stream.Writer()
+	defer writer.Close()
+
+	for i := 0; i < 100; i++ {
+		writer.Write(&i)
+	}
+	testutils.CheckUint64(100, stream.Size(), t)
+
+	stream2 := NewIntStream("test2", "id", nil)
+	defer stream2.Close()
+	var reader *IntStreamReader = stream2.Reader(0) // from beginning
+	defer reader.Close()
+
+	for i := 0; i < 100; i++ {
+		testutils.CheckInt(i, reader.Read(), t)
+	}
+}
+
+func TestMultiStreamPageIncrement(t *testing.T) {
+	cleanupFiles(t)
+
+	stream := NewIntStream("test", "id", nil)
+	defer stream.Close()
+
+	var writer *IntStreamWriter = stream.Writer()
+	defer writer.Close()
+
+	// 8 * 512 = 4096
+	for i := 0; i < 513; i++ {
+		writer.Write(&i)
+	}
+	testutils.CheckUint64(513, stream.Size(), t)
+
+	stream2 := NewIntStream("test2", "id", nil)
+	defer stream2.Close()
+	var reader *IntStreamReader = stream2.Reader(0) // from beginning
+	defer reader.Close()
+
+	for i := 0; i < 513; i++ {
+		testutils.CheckInt(i, reader.Read(), t)
+	}
+}
+
 /*
 func TestMultiStreamSingleWriterSingleReader(t *testing.T) {
 	cleanupFiles(t)

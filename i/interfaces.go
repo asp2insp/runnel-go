@@ -16,7 +16,7 @@ type Storage interface {
 	// the client and the memory backing it may disappear.
 	// DO NOT HOLD ONTO THIS REFERENCE
 	GetBytes(start, end int64) []byte
-	// Get the current capacity
+	// Get the current capacity (in bytes, not items)
 	Capacity() uint64
 	// Get the current number of entries (messages)
 	Header() *StreamHeader

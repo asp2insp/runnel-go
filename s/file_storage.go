@@ -40,6 +40,7 @@ func (store *fileStorage) Init(id string) i.Storage {
 	// Init the data
 	store.file = open(fname(store.fileId, store.rootPath), os.O_RDWR|os.O_CREATE|os.O_APPEND)
 	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
+	store.header.FileSize = utils.Filesize(store.file)
 	return store
 }
 
