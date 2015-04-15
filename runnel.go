@@ -106,7 +106,8 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	// Get old tail
 	offset := writer.parent.header().Tail
 	// Bump tail
-	writer.parent.header().Tail += uint64(unsafe.Sizeof(data))
+	dataSize := uint64(unsafe.Sizeof(data))
+	writer.parent.header().Tail += dataSize
 
 	// Check before we write
 	if writer.parent.header().Tail > storage.Capacity() {
@@ -119,7 +120,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	*pointer = *data
 
 	// Declare data available
-	writer.parent.header().LastMessage = offset
+	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+dataSize)
 	writer.parent.header().EntryCount += 1
 	storage.Flush()
 }
@@ -127,6 +128,14 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 // Close the writer
 func (writer *TypedStreamWriter) Close() {
 	writer.isAlive = false
+}
+
+func (writer *TypedStreamWriter) max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	} else {
+		return b
+	}
 }
 
 // =================== OUTPUT ===================
@@ -164,17 +173,12 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive && reader.parent.IsAlive {
-		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
-			reader.parent.storage.Refresh()
-		}
-		if reader.base+reader.offset <= reader.parent.header().LastMessage {
+		if reader.base+reader.offset < reader.parent.header().LastMessage {
 			// Advance the reader through the stream
 			address := &reader.parent.storage.GetBytes(0, -1)[reader.base+reader.offset]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
-			if reader.base+reader.offset < reader.parent.header().LastMessage {
-				reader.offset += uint64(unsafe.Sizeof(pointer))
-			}
+			reader.offset += uint64(unsafe.Sizeof(pointer))
 		}
 	}
 }

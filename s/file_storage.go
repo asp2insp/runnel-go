@@ -86,8 +86,12 @@ func (store *fileStorage) Flush() {
 }
 
 func (store *fileStorage) Refresh() {
+	tmpMap := store.mappedMemory
 	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
-	store.headerMemory = mmapFile(store.headerFile, mmap.RDWR)
+	if len(tmpMap) > 0 {
+		tmpMap.Unmap()
+	}
+	store.header.FileSize = utils.Filesize(store.file)
 }
 
 // CLOSABLE

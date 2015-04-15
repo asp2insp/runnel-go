@@ -3,6 +3,7 @@ package runnel
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/asp2insp/go-misc/testutils"
@@ -69,7 +70,7 @@ func TestMultiStreamInsertUpdatesInputHeader(t *testing.T) {
 
 	testutils.CheckUint64(2, stream2.Size(), t)
 	testutils.CheckUint64(16, stream2.header().Tail, t)
-	testutils.CheckUint64(8, stream2.header().LastMessage, t)
+	testutils.CheckUint64(16, stream2.header().LastMessage, t)
 }
 
 func TestMultiStreamRoundTripMulti(t *testing.T) {
@@ -121,7 +122,6 @@ func TestMultiStreamPageIncrement(t *testing.T) {
 	}
 }
 
-/*
 func TestMultiStreamSingleWriterSingleReader(t *testing.T) {
 	cleanupFiles(t)
 
@@ -157,28 +157,31 @@ func TestMultiStreamSingleWriterSingleReader(t *testing.T) {
 	wg.Wait()
 }
 
+func TestMultiStreamMultiSingleWriterMultipleReaders(t *testing.T) {
+	cleanupFiles(t)
 
-func TestMultiSingleWriterMultipleReaders(t *testing.T) {
-	stream := NewIntStream("test", "", nil)
-	defer stream.Close()
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
 
 	go func() {
-		var writer *IntStreamWriter = stream.Writer()
+		inStream := NewIntStream("test", "id", nil)
+		defer inStream.Close()
+		var writer *IntStreamWriter = inStream.Writer()
 		defer writer.Close()
 
 		// 4096 / 8 = 512
 		for i := 0; i < 513; i++ {
 			writer.Write(&i)
 		}
-		testutils.CheckUint64(513, stream.Size(), t)
+		testutils.CheckUint64(513, inStream.Size(), t)
 		wg.Done()
 	}()
 
 	for r := 0; r < 10; r++ {
 		go func() {
-			var reader *IntStreamReader = stream.Reader(0) // from beginning
+			outStream := NewIntStream("test", "id", nil)
+			defer outStream.Close()
+			var reader *IntStreamReader = outStream.Reader(0) // from beginning
 			defer reader.Close()
 
 			for i := 0; i < 513; i++ {
@@ -191,15 +194,19 @@ func TestMultiSingleWriterMultipleReaders(t *testing.T) {
 	wg.Wait()
 }
 
-func TestMultiSingleWriterMultipleHungryReaders(t *testing.T) {
-	stream := NewIntStream("test", "", nil)
-	defer stream.Close()
+/*
+
+func TestMultiStreamMultiSingleWriterMultipleHungryReaders(t *testing.T) {
+	cleanupFiles(t)
+
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
 
 	for r := 0; r < 10; r++ {
 		go func() {
-			var reader *IntStreamReader = stream.Reader(0) // from beginning
+			outStream := NewIntStream("test", "id", nil)
+			defer outStream.Close()
+			var reader *IntStreamReader = outStream.Reader(0) // from beginning
 			defer reader.Close()
 
 			for i := 0; i < 513; i++ {
@@ -210,20 +217,23 @@ func TestMultiSingleWriterMultipleHungryReaders(t *testing.T) {
 	}
 
 	go func() {
-		var writer *IntStreamWriter = stream.Writer()
+		inStream := NewIntStream("test", "id", nil)
+		defer inStream.Close()
+		var writer *IntStreamWriter = inStream.Writer()
 		defer writer.Close()
 
 		// 4096 / 8 = 512
 		for i := 0; i < 513; i++ {
 			writer.Write(&i)
 		}
-		testutils.CheckUint64(513, stream.Size(), t)
+		testutils.CheckUint64(513, inStream.Size(), t)
 		wg.Done()
 	}()
 
 	wg.Wait()
 }
 
+/*
 func TestMultiMultipleWritersSingleReader(t *testing.T) {
 	stream := NewIntStream("test", "", nil)
 	defer stream.Close()

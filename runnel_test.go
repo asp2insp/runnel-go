@@ -98,7 +98,7 @@ func TestInsertUpdatesInputHeader(t *testing.T) {
 
 	testutils.CheckUint64(2, stream.Size(), t)
 	testutils.CheckUint64(16, stream.header().Tail, t)
-	testutils.CheckUint64(8, stream.header().LastMessage, t)
+	testutils.CheckUint64(16, stream.header().LastMessage, t)
 	stream.Close()
 }
 
@@ -194,6 +194,7 @@ func TestSingleWriterSingleReader(t *testing.T) {
 
 		for i := 0; i < 513; i++ {
 			testutils.CheckInt(i, reader.Read(), t)
+			t.Logf("Header %+v", reader.parent.header())
 		}
 		wg.Done()
 	}()
@@ -201,7 +202,6 @@ func TestSingleWriterSingleReader(t *testing.T) {
 	wg.Wait()
 }
 
-/*
 func TestSingleWriterMultipleReaders(t *testing.T) {
 	stream := NewIntStream("test", "", nil)
 	defer stream.Close()
@@ -339,4 +339,3 @@ func TestMultipleWritersMultipleReaders(t *testing.T) {
 	wg.Wait()
 	testutils.CheckUint64(513*10, stream.Size(), t)
 }
-*/

@@ -1,9 +1,11 @@
 package i
 
 type StreamHeader struct {
-	FileSize    uint64
-	EntryCount  uint64
-	Tail        uint64
+	FileSize   uint64
+	EntryCount uint64
+	// One past the end
+	Tail uint64
+	// One past the end
 	LastMessage uint64
 }
 
