@@ -16,8 +16,8 @@ type Storage interface {
 	Resize(newSize uint64) Storage
 	// Get a window into the storage. This window is not owned by
 	// the client and the memory backing it may disappear.
-	// DO NOT HOLD ONTO THIS REFERENCE
-	GetBytes(start, end int64) []byte
+	// DO NOT HOLD ONTO THIS REFERENCE.
+	GetBytes(start, end uint64) []byte
 	// Get the current capacity (in bytes, not items)
 	Capacity() uint64
 	// Get the current number of entries (messages)

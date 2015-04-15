@@ -194,8 +194,6 @@ func TestMultiStreamMultiSingleWriterMultipleReaders(t *testing.T) {
 	wg.Wait()
 }
 
-/*
-
 func TestMultiStreamMultiSingleWriterMultipleHungryReaders(t *testing.T) {
 	cleanupFiles(t)
 
@@ -233,14 +231,13 @@ func TestMultiStreamMultiSingleWriterMultipleHungryReaders(t *testing.T) {
 	wg.Wait()
 }
 
-/*
 func TestMultiMultipleWritersSingleReader(t *testing.T) {
-	stream := NewIntStream("test", "", nil)
-	defer stream.Close()
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
 
 	go func() {
+		stream := NewIntStream("Out", "id", nil)
+		defer stream.Close()
 		var reader *IntStreamReader = stream.Reader(0) // from beginning
 		defer reader.Close()
 		var target = 513 * 10 * 3
@@ -254,6 +251,8 @@ func TestMultiMultipleWritersSingleReader(t *testing.T) {
 
 	for w := 0; w < 10; w++ {
 		go func() {
+			stream := NewIntStream("In", "id", nil)
+			defer stream.Close()
 			var writer *IntStreamWriter = stream.Writer()
 			defer writer.Close()
 			var amount = 3
@@ -266,17 +265,16 @@ func TestMultiMultipleWritersSingleReader(t *testing.T) {
 	}
 
 	wg.Wait()
-	testutils.CheckUint64(513*10, stream.Size(), t)
 }
 
 func TestMultiMultipleWritersMultipleReaders(t *testing.T) {
-	stream := NewIntStream("test", "", nil)
-	defer stream.Close()
 	var wg sync.WaitGroup
 	wg.Add(10 + 10)
 
 	for r := 0; r < 10; r++ {
 		go func() {
+			stream := NewIntStream("Out", "id", nil)
+			defer stream.Close()
 			var reader *IntStreamReader = stream.Reader(0) // from beginning
 			defer reader.Close()
 			var target = 513 * 10 * 3
@@ -291,6 +289,8 @@ func TestMultiMultipleWritersMultipleReaders(t *testing.T) {
 
 	for w := 0; w < 10; w++ {
 		go func() {
+			stream := NewIntStream("In", "id", nil)
+			defer stream.Close()
 			var writer *IntStreamWriter = stream.Writer()
 			defer writer.Close()
 			var amount = 3
@@ -303,9 +303,7 @@ func TestMultiMultipleWritersMultipleReaders(t *testing.T) {
 	}
 
 	wg.Wait()
-	testutils.CheckUint64(513*10, stream.Size(), t)
 }
-*/
 
 func cleanupFiles(t *testing.T) {
 	os.Remove(filepath.Join(os.TempDir(), "id"))

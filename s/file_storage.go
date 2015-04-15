@@ -59,8 +59,8 @@ func (store *fileStorage) Resize(size uint64) i.Storage {
 	return store
 }
 
-func (store *fileStorage) GetBytes(start, end int64) []byte {
-	return store.mappedMemory
+func (store *fileStorage) GetBytes(start, end uint64) []byte {
+	return store.mappedMemory[start:end]
 }
 
 func (store *fileStorage) Capacity() uint64 {
@@ -102,9 +102,9 @@ func (store *fileStorage) Close() {
 	store.header = &i.StreamHeader{} // Empty the header so calls to Size() return 0
 	// Release the memory
 	store.mappedMemory.Unmap()
-	store.file.Close()
+	// store.file.Close()
 	store.headerMemory.Unmap()
-	store.headerFile.Close()
+	// store.headerFile.Close()
 }
 
 // UTILS

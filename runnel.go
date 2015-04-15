@@ -18,6 +18,7 @@ type TypedStream struct {
 	storage           i.Storage
 	IsAlive           bool
 	lastKnownFileSize uint64
+	typeSize          uint64
 }
 
 type TypedRef struct {
@@ -38,6 +39,7 @@ func NewTypedStream(name, id string, store i.Storage) *TypedStream {
 		storage:           store,
 		IsAlive:           true,
 		lastKnownFileSize: store.Capacity(),
+		typeSize:          uint64(unsafe.Sizeof(new(Typed))),
 	}
 	return ret
 }
@@ -106,8 +108,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	// Get old tail
 	offset := writer.parent.header().Tail
 	// Bump tail
-	dataSize := uint64(unsafe.Sizeof(data))
-	writer.parent.header().Tail += dataSize
+	writer.parent.header().Tail += writer.parent.typeSize
 
 	// Check before we write
 	if writer.parent.header().Tail > storage.Capacity() {
@@ -115,12 +116,13 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	}
 
 	// Write data
-	address := &writer.parent.storage.GetBytes(0, -1)[offset]
+	slice := writer.parent.storage.GetBytes(offset, offset+writer.parent.typeSize)
+	address := &slice[0]
 	pointer := (*Typed)(unsafe.Pointer(address))
 	*pointer = *data
 
 	// Declare data available
-	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+dataSize)
+	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+writer.parent.typeSize)
 	writer.parent.header().EntryCount += 1
 	storage.Flush()
 }
@@ -173,12 +175,17 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive && reader.parent.IsAlive {
+		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
+			reader.parent.storage.Refresh()
+		}
 		if reader.base+reader.offset < reader.parent.header().LastMessage {
 			// Advance the reader through the stream
-			address := &reader.parent.storage.GetBytes(0, -1)[reader.base+reader.offset]
+			bot := reader.base + reader.offset
+			slice := reader.parent.storage.GetBytes(bot, bot+reader.parent.typeSize)
+			address := &slice[0]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
-			reader.offset += uint64(unsafe.Sizeof(pointer))
+			reader.offset += reader.parent.typeSize
 		}
 	}
 }
