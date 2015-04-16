@@ -11,13 +11,13 @@ import (
 //go:generate genny -in=runnel.go -out=IntStream.go gen "Typed=int"
 
 func TestCreation(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	var stream *IntStream = NewIntStream("test", "id", nil)
 	defer stream.Close()
 }
 
 func TestMakeWriter(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	var stream *IntStream = NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -26,7 +26,7 @@ func TestMakeWriter(t *testing.T) {
 }
 
 func TestMakeReader(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -35,7 +35,7 @@ func TestMakeReader(t *testing.T) {
 }
 
 func TestWrite(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -50,7 +50,7 @@ func TestWrite(t *testing.T) {
 }
 
 func TestWriteIncrementsSize(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -66,7 +66,7 @@ func TestWriteIncrementsSize(t *testing.T) {
 }
 
 func TestDataRoundTrip(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -84,7 +84,7 @@ func TestDataRoundTrip(t *testing.T) {
 }
 
 func TestInsertUpdatesInputHeader(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -103,7 +103,7 @@ func TestInsertUpdatesInputHeader(t *testing.T) {
 }
 
 func TestRoundTripMulti(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -124,7 +124,7 @@ func TestRoundTripMulti(t *testing.T) {
 }
 
 func TestPageIncrement(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -148,7 +148,7 @@ func TestPageIncrement(t *testing.T) {
 }
 
 func TestStartReadFromMidway(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 
@@ -170,7 +170,7 @@ func TestStartReadFromMidway(t *testing.T) {
 }
 
 func TestSingleWriterSingleReader(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
 	var wg sync.WaitGroup
@@ -194,7 +194,6 @@ func TestSingleWriterSingleReader(t *testing.T) {
 
 		for i := 0; i < 513; i++ {
 			testutils.CheckInt(i, reader.Read(), t)
-			t.Logf("Header %+v", reader.parent.header())
 		}
 		wg.Done()
 	}()

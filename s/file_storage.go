@@ -3,6 +3,7 @@ package s
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"unsafe"
 
 	"github.com/asp2insp/go-misc/utils"
@@ -18,11 +19,13 @@ type fileStorage struct {
 	mappedMemory mmap.MMap
 	headerMemory mmap.MMap
 	header       *i.StreamHeader
+	lock         *sync.RWMutex
 }
 
 func NewFileStorage(root string) *fileStorage {
 	return &fileStorage{
 		rootPath: root,
+		lock:     new(sync.RWMutex),
 	}
 }
 
@@ -45,6 +48,12 @@ func (store *fileStorage) Init(id string) i.Storage {
 }
 
 func (store *fileStorage) Resize(size uint64) i.Storage {
+	store.lock.Lock()
+	// Check to ensure the resize is still necessary
+	if store.Utilization() < 75 {
+		store.lock.Unlock()
+		return store
+	}
 	if store.file != nil {
 		err := store.file.Truncate(int64(size))
 		utils.Check(err)
@@ -56,11 +65,20 @@ func (store *fileStorage) Resize(size uint64) i.Storage {
 		tmpMap.Unmap()
 	}
 	store.header.FileSize = size
+	store.lock.Unlock()
 	return store
 }
 
 func (store *fileStorage) GetBytes(start, end uint64) []byte {
+	if end >= uint64(len(store.mappedMemory)) {
+		store.Refresh()
+	}
+	store.lock.RLock()
 	return store.mappedMemory[start:end]
+}
+
+func (store *fileStorage) ReturnBytes(slice []byte) {
+	store.lock.RUnlock()
 }
 
 func (store *fileStorage) Capacity() uint64 {
@@ -81,17 +99,26 @@ func (store *fileStorage) Utilization() int {
 }
 
 func (store *fileStorage) Flush() {
+	store.lock.Lock()
 	store.mappedMemory.Flush()
 	store.headerMemory.Flush()
+	store.lock.Unlock()
 }
 
 func (store *fileStorage) Refresh() {
+	store.lock.Lock()
+	// Check to make sure the refresh is still necessary
+	if uint64(len(store.mappedMemory)) == store.header.FileSize {
+		store.lock.Unlock()
+		return
+	}
 	tmpMap := store.mappedMemory
 	store.mappedMemory = mmapFile(store.file, mmap.RDWR)
 	if len(tmpMap) > 0 {
 		tmpMap.Unmap()
 	}
 	store.header.FileSize = utils.Filesize(store.file)
+	store.lock.Unlock()
 }
 
 // CLOSABLE

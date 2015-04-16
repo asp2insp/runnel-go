@@ -18,6 +18,7 @@ type Storage interface {
 	// the client and the memory backing it may disappear.
 	// DO NOT HOLD ONTO THIS REFERENCE.
 	GetBytes(start, end uint64) []byte
+	ReturnBytes(slice []byte)
 	// Get the current capacity (in bytes, not items)
 	Capacity() uint64
 	// Get the current number of entries (messages)

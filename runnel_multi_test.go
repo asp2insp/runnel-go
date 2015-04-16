@@ -10,7 +10,7 @@ import (
 )
 
 func TestMultiStreamWriteIncrementsSize(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
@@ -31,7 +31,7 @@ func TestMultiStreamWriteIncrementsSize(t *testing.T) {
 }
 
 func TestMultiStreamDataRoundTrip(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
@@ -52,7 +52,7 @@ func TestMultiStreamDataRoundTrip(t *testing.T) {
 }
 
 func TestMultiStreamInsertUpdatesInputHeader(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	stream := NewIntStream("input", "id", nil)
 	defer stream.Close()
@@ -74,7 +74,7 @@ func TestMultiStreamInsertUpdatesInputHeader(t *testing.T) {
 }
 
 func TestMultiStreamRoundTripMulti(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
@@ -98,7 +98,7 @@ func TestMultiStreamRoundTripMulti(t *testing.T) {
 }
 
 func TestMultiStreamPageIncrement(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	stream := NewIntStream("test", "id", nil)
 	defer stream.Close()
@@ -123,7 +123,7 @@ func TestMultiStreamPageIncrement(t *testing.T) {
 }
 
 func TestMultiStreamSingleWriterSingleReader(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -158,7 +158,7 @@ func TestMultiStreamSingleWriterSingleReader(t *testing.T) {
 }
 
 func TestMultiStreamMultiSingleWriterMultipleReaders(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
@@ -195,7 +195,7 @@ func TestMultiStreamMultiSingleWriterMultipleReaders(t *testing.T) {
 }
 
 func TestMultiStreamMultiSingleWriterMultipleHungryReaders(t *testing.T) {
-	cleanupFiles(t)
+	cleanupFiles()
 
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
@@ -231,7 +231,8 @@ func TestMultiStreamMultiSingleWriterMultipleHungryReaders(t *testing.T) {
 	wg.Wait()
 }
 
-func TestMultiMultipleWritersSingleReader(t *testing.T) {
+func TestMultiStreamMultipleWritersSingleReader(t *testing.T) {
+	cleanupFiles()
 	var wg sync.WaitGroup
 	wg.Add(1 + 10)
 
@@ -245,6 +246,7 @@ func TestMultiMultipleWritersSingleReader(t *testing.T) {
 		for i := 0; i < 513*10; i++ {
 			target -= reader.Read()
 		}
+		testutils.CheckUint64(513*10, stream.Size(), t)
 		testutils.CheckInt(0, target, t)
 		wg.Done()
 	}()
@@ -267,7 +269,8 @@ func TestMultiMultipleWritersSingleReader(t *testing.T) {
 	wg.Wait()
 }
 
-func TestMultiMultipleWritersMultipleReaders(t *testing.T) {
+func TestMultiStreamMultipleWritersMultipleReaders(t *testing.T) {
+	cleanupFiles()
 	var wg sync.WaitGroup
 	wg.Add(10 + 10)
 
@@ -305,7 +308,7 @@ func TestMultiMultipleWritersMultipleReaders(t *testing.T) {
 	wg.Wait()
 }
 
-func cleanupFiles(t *testing.T) {
+func cleanupFiles() {
 	os.Remove(filepath.Join(os.TempDir(), "id"))
 	os.Remove(filepath.Join(os.TempDir(), "id_header"))
 }

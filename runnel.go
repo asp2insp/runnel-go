@@ -118,8 +118,10 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	// Write data
 	slice := writer.parent.storage.GetBytes(offset, offset+writer.parent.typeSize)
 	address := &slice[0]
-	pointer := (*Typed)(unsafe.Pointer(address))
-	*pointer = *data
+	var pointer *Typed = (*Typed)(unsafe.Pointer(address))
+	var datum Typed = *data
+	*pointer = datum
+	writer.parent.storage.ReturnBytes(slice)
 
 	// Declare data available
 	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+writer.parent.typeSize)
@@ -185,6 +187,7 @@ func (reader *TypedStreamReader) readLoop() {
 			address := &slice[0]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
+			reader.parent.storage.ReturnBytes(slice)
 			reader.offset += reader.parent.typeSize
 		}
 	}
