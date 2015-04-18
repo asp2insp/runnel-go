@@ -7,7 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/asp2insp/go-misc/utils"
-	"github.com/asp2insp/runnel-go/i"
+	"github.com/asp2insp/runnel-go/runnel/i"
 	"github.com/edsrzf/mmap-go"
 )
 

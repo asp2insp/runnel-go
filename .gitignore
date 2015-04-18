@@ -5,6 +5,7 @@
 *.o
 *.a
 *.so
+main
 
 # Folders
 _obj

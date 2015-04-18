@@ -5,8 +5,8 @@ import (
 	"unsafe"
 
 	"code.google.com/p/go-uuid/uuid"
-	"github.com/asp2insp/runnel-go/i"
-	"github.com/asp2insp/runnel-go/s"
+	"github.com/asp2insp/runnel-go/runnel/i"
+	"github.com/asp2insp/runnel-go/runnel/s"
 	"github.com/cheekybits/genny/generic"
 )
 

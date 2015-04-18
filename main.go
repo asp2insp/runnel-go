@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/asp2insp/runnel-go/runnel"
@@ -11,27 +13,29 @@ import (
 func main() {
 	defer profile.Start().Stop()
 
-	cleanupFiles()
+	os.Remove(filepath.Join(os.TempDir(), "id"))
+	os.Remove(filepath.Join(os.TempDir(), "id_header"))
 	var wg sync.WaitGroup
-	wg.Add(10 + 10)
-	size := b.N
+	workers := 10
+	wg.Add(2 * workers)
+	size := 10000
 
-	for r := 0; r < 10; r++ {
+	for r := 0; r < workers; r++ {
 		go func() {
 			stream := runnel.NewIntStream("Out", "id", nil)
 			defer stream.Close()
 			var reader *runnel.IntStreamReader = stream.Reader(0) // from beginning
 			defer reader.Close()
-			var target = size * 10 * 3
+			var target = size * workers * 3
 
-			for i := 0; i < size*10; i++ {
+			for i := 0; i < size*workers; i++ {
 				target -= reader.Read()
 			}
 			wg.Done()
 		}()
 	}
 
-	for w := 0; w < 10; w++ {
+	for w := 0; w < workers; w++ {
 		go func() {
 			stream := runnel.NewIntStream("In", "id", nil)
 			defer stream.Close()
