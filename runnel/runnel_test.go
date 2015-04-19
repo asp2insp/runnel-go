@@ -193,7 +193,8 @@ func TestSingleWriterSingleReader(t *testing.T) {
 		defer reader.Close()
 
 		for i := 0; i < 513; i++ {
-			testutils.CheckInt(i, reader.Read(), t)
+			datum := reader.Read()
+			testutils.CheckInt(i, datum, t)
 		}
 		wg.Done()
 	}()
@@ -201,6 +202,7 @@ func TestSingleWriterSingleReader(t *testing.T) {
 	wg.Wait()
 }
 
+/*
 func TestSingleWriterMultipleReaders(t *testing.T) {
 	stream := NewIntStream("test", "", nil)
 	defer stream.Close()
@@ -338,3 +340,4 @@ func TestMultipleWritersMultipleReaders(t *testing.T) {
 	wg.Wait()
 	testutils.CheckUint64(513*10, stream.Size(), t)
 }
+*/

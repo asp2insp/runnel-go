@@ -1,0 +1,2 @@
+go tool pprof --pdf ./main $1 > callgraph.pdf;
+open callgraph.pdf;

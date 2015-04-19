@@ -3,7 +3,6 @@ package s
 import (
 	"os"
 	"path/filepath"
-	"sync"
 	"unsafe"
 
 	"github.com/asp2insp/go-misc/utils"
@@ -19,13 +18,11 @@ type fileStorage struct {
 	mappedMemory mmap.MMap
 	headerMemory mmap.MMap
 	header       *i.StreamHeader
-	lock         *sync.RWMutex
 }
 
 func NewFileStorage(root string) *fileStorage {
 	return &fileStorage{
 		rootPath: root,
-		lock:     new(sync.RWMutex),
 	}
 }
 
@@ -34,9 +31,7 @@ func (store *fileStorage) Init(id string) i.Storage {
 	store.fileId = id
 
 	// Init the header
-	headerSize := int64(unsafe.Sizeof(&i.StreamHeader{}))
 	store.headerFile = open(fheader(store.fileId, store.rootPath), os.O_RDWR|os.O_CREATE|os.O_APPEND)
-	store.headerFile.Truncate(headerSize)
 	store.headerMemory = mmapFile(store.headerFile, mmap.RDWR)
 	store.header = mmapToHeader(store.headerMemory)
 
@@ -47,11 +42,13 @@ func (store *fileStorage) Init(id string) i.Storage {
 	return store
 }
 
+func (store *fileStorage) Clone() i.Storage {
+	return NewFileStorage(store.rootPath).Init(store.fileId)
+}
+
 func (store *fileStorage) Resize(size uint64) i.Storage {
-	store.lock.Lock()
 	// Check to ensure the resize is still necessary
 	if store.Utilization() < 75 {
-		store.lock.Unlock()
 		return store
 	}
 	if store.file != nil {
@@ -65,7 +62,6 @@ func (store *fileStorage) Resize(size uint64) i.Storage {
 		tmpMap.Unmap()
 	}
 	store.header.FileSize = size
-	store.lock.Unlock()
 	return store
 }
 
@@ -73,12 +69,7 @@ func (store *fileStorage) GetBytes(start, end uint64) []byte {
 	if end >= uint64(len(store.mappedMemory)) {
 		store.Refresh()
 	}
-	store.lock.RLock()
 	return store.mappedMemory[start:end]
-}
-
-func (store *fileStorage) ReturnBytes(slice []byte) {
-	store.lock.RUnlock()
 }
 
 func (store *fileStorage) Capacity() uint64 {
@@ -99,17 +90,13 @@ func (store *fileStorage) Utilization() int {
 }
 
 func (store *fileStorage) Flush() {
-	store.lock.Lock()
 	store.mappedMemory.Flush()
 	store.headerMemory.Flush()
-	store.lock.Unlock()
 }
 
 func (store *fileStorage) Refresh() {
-	store.lock.Lock()
 	// Check to make sure the refresh is still necessary
 	if uint64(len(store.mappedMemory)) == store.header.FileSize {
-		store.lock.Unlock()
 		return
 	}
 	tmpMap := store.mappedMemory
@@ -118,7 +105,6 @@ func (store *fileStorage) Refresh() {
 		tmpMap.Unmap()
 	}
 	store.header.FileSize = utils.Filesize(store.file)
-	store.lock.Unlock()
 }
 
 // CLOSABLE

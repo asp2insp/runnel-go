@@ -56,6 +56,8 @@ type TypedStreamWriter struct {
 	inChannel <-chan *Typed
 	// The stream that this writer will write to
 	parent *TypedStream
+	// The storage to write into
+	storage i.Storage
 	// Whether this writer is alive
 	isAlive bool
 }
@@ -69,6 +71,7 @@ func (stream *TypedStream) Writer() *TypedStreamWriter {
 	ret := &TypedStreamWriter{
 		parent:    stream,
 		inChannel: make(<-chan *Typed, 10),
+		storage:   stream.storage.Clone(),
 	}
 	go ret.writeLoop()
 	ret.isAlive = true
@@ -96,7 +99,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 		// If the stream/writer isn't alive, there's no point
 		return
 	}
-	storage := writer.parent.storage
+	storage := writer.storage
 	// Check to see if we need to resize
 	if storage.Utilization() > 75 {
 		// TODO: Work out how to handle multiple writers here, maybe through buffer swap
@@ -116,12 +119,11 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	}
 
 	// Write data
-	slice := writer.parent.storage.GetBytes(offset, offset+writer.parent.typeSize)
+	slice := storage.GetBytes(offset, offset+writer.parent.typeSize)
 	address := &slice[0]
 	var pointer *Typed = (*Typed)(unsafe.Pointer(address))
 	var datum Typed = *data
 	*pointer = datum
-	writer.parent.storage.ReturnBytes(slice)
 
 	// Declare data available
 	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+writer.parent.typeSize)
@@ -132,6 +134,7 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 // Close the writer
 func (writer *TypedStreamWriter) Close() {
 	writer.isAlive = false
+	writer.storage.Close()
 }
 
 func (writer *TypedStreamWriter) max(a, b uint64) uint64 {
@@ -157,6 +160,8 @@ type TypedStreamReader struct {
 	offset uint64
 	// Whether this reader is alive
 	isAlive bool
+	// The storage to read from
+	storage i.Storage
 }
 
 // Build a new stream reader which maintains its place in the stream
@@ -168,6 +173,7 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 		outChannel: make(chan Typed),
 		base:       base,
 		offset:     0,
+		storage:    stream.storage.Clone(),
 	}
 	go ret.readLoop()
 	ret.isAlive = true
@@ -179,15 +185,15 @@ func (reader *TypedStreamReader) readLoop() {
 	for reader.isAlive && reader.parent.IsAlive {
 		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
 			reader.parent.storage.Refresh()
+			reader.parent.lastKnownFileSize = reader.parent.header().FileSize
 		}
 		if reader.base+reader.offset < reader.parent.header().LastMessage {
 			// Advance the reader through the stream
 			bot := reader.base + reader.offset
-			slice := reader.parent.storage.GetBytes(bot, bot+reader.parent.typeSize)
+			slice := reader.storage.GetBytes(bot, bot+reader.parent.typeSize)
 			address := &slice[0]
 			pointer := (*Typed)(unsafe.Pointer(address))
 			reader.outChannel <- *pointer
-			reader.parent.storage.ReturnBytes(slice)
 			reader.offset += reader.parent.typeSize
 		}
 	}

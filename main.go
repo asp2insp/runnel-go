@@ -6,19 +6,17 @@ import (
 	"sync"
 
 	"github.com/asp2insp/runnel-go/runnel"
-
 	"github.com/pkg/profile"
 )
 
 func main() {
 	defer profile.Start().Stop()
-
 	os.Remove(filepath.Join(os.TempDir(), "id"))
 	os.Remove(filepath.Join(os.TempDir(), "id_header"))
 	var wg sync.WaitGroup
 	workers := 10
-	wg.Add(2 * workers)
-	size := 10000
+	wg.Add(workers * 2)
+	size := 10 * 1000
 
 	for r := 0; r < workers; r++ {
 		go func() {
@@ -37,6 +35,7 @@ func main() {
 
 	for w := 0; w < workers; w++ {
 		go func() {
+
 			stream := runnel.NewIntStream("In", "id", nil)
 			defer stream.Close()
 			var writer *runnel.IntStreamWriter = stream.Writer()
