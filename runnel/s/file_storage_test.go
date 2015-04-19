@@ -10,7 +10,7 @@ import (
 var testData = []byte("0123456789ABCDEF")
 
 func TestInit(t *testing.T) {
-	defer cleanup()
+	cleanup()
 	store := NewFileStorage("")
 	store.Init("id")
 	defer store.Close()
@@ -35,7 +35,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestPersistence(t *testing.T) {
-	defer cleanup()
+	cleanup()
 	store := NewFileStorage("").Init("id")
 	copy(store.GetBytes(0, uint64(len(testData))), testData)
 	store.Close()
@@ -48,7 +48,7 @@ func TestPersistence(t *testing.T) {
 }
 
 func TestUtilization(t *testing.T) {
-	defer cleanup()
+	cleanup()
 	store := NewFileStorage("")
 	store.Init("id")
 	defer store.Close()
