@@ -6,6 +6,7 @@ install:
   - go get github.com/asp2insp/go-misc/utils
   - go get github.com/asp2insp/go-misc/testutils
   - go get github.com/edsrzf/mmap-go
+  - go get github.com/pkg/profile
 
 go:
   - 1.4
