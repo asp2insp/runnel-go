@@ -37,13 +37,13 @@ func TestInit(t *testing.T) {
 func TestPersistence(t *testing.T) {
 	defer cleanup()
 	store := NewFileStorage("").Init("id")
-	copy(store.GetBytes(0, -1), testData)
+	copy(store.GetBytes(0, uint64(len(testData))), testData)
 	store.Close()
 
 	store = NewFileStorage("").Init("id")
 	defer store.Close()
-	if store.GetBytes(0, -1)[15] != 'F' {
-		t.Errorf("Expected %b got %b", 'F', store.GetBytes(0, -1)[15])
+	if store.GetBytes(0, store.Capacity())[15] != 'F' {
+		t.Errorf("Expected %b got %b", 'F', store.GetBytes(0, store.Capacity())[15])
 	}
 }
 
