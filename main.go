@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/asp2insp/runnel-go/runnel"
@@ -10,6 +11,7 @@ import (
 )
 
 func main() {
+	runtime.GOMAXPROCS(1)
 	defer profile.Start().Stop()
 	os.Remove(filepath.Join(os.TempDir(), "id"))
 	os.Remove(filepath.Join(os.TempDir(), "id_header"))

@@ -13,4 +13,5 @@ go:
   - tip
 
 script:
-  - genny -in=./runnel/runnel.go -out=./runnel/IntStream.go gen "Typed=int"; go test -v ./...
+  - genny -in=./runnel/runnel.go -out=./runnel/IntStream.go gen "Typed=int"
+  - go test -v ./...

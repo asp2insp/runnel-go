@@ -100,22 +100,23 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 		return
 	}
 	storage := writer.storage
+	header := storage.Header()
 	// Check to see if we need to resize
 	if storage.Utilization() > 75 {
 		// TODO: Work out how to handle multiple writers here, maybe through buffer swap
 		storage.Resize(uint64(2 * storage.Capacity()))
-		writer.parent.lastKnownFileSize = writer.parent.header().FileSize
+		writer.parent.lastKnownFileSize = header.FileSize
 	}
 
 	// TODO make this atomic
 	// Get old tail
-	offset := writer.parent.header().Tail
+	offset := header.Tail
 	// Bump tail
-	writer.parent.header().Tail += writer.parent.typeSize
+	header.Tail += writer.parent.typeSize
 
 	// Check before we write
-	if writer.parent.header().Tail > storage.Capacity() {
-		panic(fmt.Sprintf("No Room! Header: %+v", storage.Header()))
+	if header.Tail > storage.Capacity() {
+		panic(fmt.Sprintf("No Room! Header: %+v", header))
 	}
 
 	// Write data
@@ -126,8 +127,8 @@ func (writer *TypedStreamWriter) Write(data *Typed) {
 	*pointer = datum
 
 	// Declare data available
-	writer.parent.header().LastMessage = writer.max(writer.parent.header().LastMessage, offset+writer.parent.typeSize)
-	writer.parent.header().EntryCount += 1
+	header.LastMessage = writer.max(header.LastMessage, offset+writer.parent.typeSize)
+	header.EntryCount += 1
 	storage.Flush()
 }
 
@@ -182,12 +183,13 @@ func (stream *TypedStream) Reader(base uint64) *TypedStreamReader {
 
 // Loop endlessly to read the data from the stream
 func (reader *TypedStreamReader) readLoop() {
+	header := reader.storage.Header()
 	for reader.isAlive && reader.parent.IsAlive {
-		if reader.parent.lastKnownFileSize != reader.parent.header().FileSize {
+		if reader.parent.lastKnownFileSize != header.FileSize {
 			reader.parent.storage.Refresh()
-			reader.parent.lastKnownFileSize = reader.parent.header().FileSize
+			reader.parent.lastKnownFileSize = header.FileSize
 		}
-		if reader.base+reader.offset < reader.parent.header().LastMessage {
+		if reader.base+reader.offset < header.LastMessage {
 			// Advance the reader through the stream
 			bot := reader.base + reader.offset
 			slice := reader.storage.GetBytes(bot, bot+reader.parent.typeSize)
