@@ -11,4 +11,5 @@ go:
   - 1.4
   - tip
 
-script: genny -in=runnel.go -out=IntStream.go gen "Typed=int"; go test ./...
+script:
+  - genny -in=./runnel/runnel.go -out=./runnel/IntStream.go gen "Typed=int"; go test -v ./...
